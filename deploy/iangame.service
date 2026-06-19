@@ -1,0 +1,39 @@
+# iangame systemd 服务单元
+# 用法:sudo cp deploy/iangame.service /etc/systemd/system/iangame.service
+#       sudo systemctl daemon-reload
+#       sudo systemctl enable --now iangame
+# 查看:sudo systemctl status iangame
+# 日志:sudo journalctl -u iangame -f
+
+[Unit]
+Description=iangame.com 游戏门户 (Flask + Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/usr/local/coneworkspace/iangame/backend
+
+# Gunicorn:2 worker(匹配 2 核)+ 每 worker 多线程;监听本地 8000
+ExecStart=/usr/local/coneworkspace/iangame/venv/bin/gunicorn \
+    --workers 2 \
+    --threads 4 \
+    --bind 127.0.0.1:8000 \
+    --access-logfile - \
+    --error-logfile - \
+    --timeout 30 \
+    wsgi:app
+
+# 生产密钥(部署时务必替换)
+Environment="IAN_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_STRING"
+Environment="IAN_DB=/usr/local/coneworkspace/iangame/data/iangame.db"
+
+Restart=on-failure
+RestartSec=3
+
+# 资源限制
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

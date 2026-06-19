@@ -9,11 +9,11 @@ DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 
 class Config:
     SECRET_KEY = os.environ.get('IAN_SECRET_KEY', 'ian-dev-secret-change-me-in-prod')
-    # SQLite 单文件
+    # SQLite 单文件。IAN_DB 既可传完整 URI(sqlite:///xxx),也可传裸文件路径
     _DB_PATH = os.environ.get('IAN_DB_PATH', os.path.join(DATA_DIR, 'iangame.db'))
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        'IAN_DB', 'sqlite:///' + _DB_PATH
-    )
+    _IAN_DB = os.environ.get('IAN_DB', 'sqlite:///' + _DB_PATH)
+    # 若传入的不是 URI(无 scheme),自动补 sqlite:/// 前缀
+    SQLALCHEMY_DATABASE_URI = _IAN_DB if '://' in _IAN_DB else 'sqlite:///' + _IAN_DB
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {'pool_pre_ping': True}
     # Session
