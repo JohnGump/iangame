@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# 项目数据(SQLite,本地生成,不入库)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# 日志与临时
+*.log
+*.pid
+.DS_Store
+*.swp
+*.swo
+
+# 编辑器/IDE
+.vscode/
+.idea/
+*.iml
+
+# 构建产物(本项目无构建,预留)
+node_modules/
+dist/
+build/
+
+# 环境与密钥
+.env
+.env.local
+*.secret
+
+# 部署临时
+deploy/*.bak
