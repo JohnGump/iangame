@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% block title %}{{ game.name }} · iangame{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="section" style="padding:24px 0 8px">
+    <div class="between" style="flex-wrap:wrap;gap:12px">
+      <div class="flex" style="gap:12px;align-items:center">
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('games_page') }}">← 大厅</a>
+        <h1 class="section-title" style="font-size:24px">{{ game.icon }} {{ game.name }}</h1>
+      </div>
+      <div class="play-meta">
+        <div class="stat-pill"><div class="k">最高分</div><div class="v" id="bestScore">0</div></div>
+        <div class="stat-pill"><div class="k">本局</div><div class="v" id="curScore">0</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="play-wrap">
+    <div class="play-main">
+      <div class="play-canvas-box" id="canvasBox">
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        <div class="overlay" id="overlay">
+          <div>
+            <div class="ttl">{{ game.icon }} {{ game.name }}</div>
+            <div class="sub">{{ game.desc }}</div>
+            <button class="btn btn-primary" id="startBtn">▶ 开始游戏</button>
+          </div>
+        </div>
+      </div>
+      <div class="play-toolbar">
+        <div class="flex gap-8">
+          <button class="btn btn-ghost btn-sm" id="restartBtn">🔄 重开</button>
+          <button class="btn btn-ghost btn-sm" id="pauseBtn">⏸ 暂停</button>
+        </div>
+        <div class="muted tiny">操作:{{ game.controls }}</div>
+      </div>
+    </div>
+
+    <aside class="play-side">
+      <div class="panel">
+        <h4>📖 玩法</h4>
+        <p class="muted tiny">{{ game.desc }}</p>
+        <p class="muted tiny mt-8">操作:{{ game.controls }}</p>
+      </div>
+      <div class="panel">
+        <h4>🏆 全球排行榜</h4>
+        <div class="lb" id="leaderboard"><div class="lb-empty">加载中…</div></div>
+        {% if not current_user %}
+        <p class="muted tiny mt-8">登录后可上榜并保存成绩</p>
+        {% endif %}
+      </div>
+      {% if current_user %}
+      <div class="panel">
+        <h4>⭐ 收藏</h4>
+        <button class="btn btn-ghost btn-sm btn-block" id="favBtn">☆ 加入收藏</button>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var SLUG = {{ game.slug|tojson }};
+  var LOGGED_IN = {% if current_user %}true{% else %}false{% endif %};
+  var canvas = document.getElementById('gameCanvas');
+  var overlay = document.getElementById('overlay');
+  var startBtn = document.getElementById('startBtn');
+  var restartBtn = document.getElementById('restartBtn');
+  var pauseBtn = document.getElementById('pauseBtn');
+  var curEl = document.getElementById('curScore');
+  var bestEl = document.getElementById('bestScore');
+  var lbEl = document.getElementById('leaderboard');
+
+  var ctrl = null, started = false, paused = false;
+  var score = 0, level = 0;
+
+  // 1. 初始 UI
+  bestEl.textContent = window.IanLocal.best(SLUG);
+  renderLB();
+
+  // 2. 加载游戏脚本(不立即开始,等用户点开始)
+  var loaded = window.IanGameLoader.mount({
+    slug: SLUG,
+    canvas: canvas,
+    hooks: {
+      onScore: function (s, lv) { score = s|0; level = lv|0; curEl.textContent = score; },
+      onGameOver: function (s, lv) { gameOver(s|0, lv|0); },
+      onState: function (st) { /* 可扩展 */ }
+    }
+  }).then(function (c) { ctrl = c; })
+    .catch(function (e) {
+      overlay.classList.remove('hidden');
+      overlay.querySelector('.ttl').textContent = '游戏加载失败';
+      overlay.querySelector('.sub').textContent = e.message;
+      startBtn.style.display = 'none';
+    });
+
+  // 3. 开始
+  startBtn.addEventListener('click', function () { beginGame(); });
+  restartBtn.addEventListener('click', function () { beginGame(); });
+  pauseBtn.addEventListener('click', function () {
+    if (!ctrl || !started) return;
+    paused = !paused;
+    if (paused) { ctrl.pause(); pauseBtn.textContent = '▶ 继续'; }
+    else { ctrl.resume(); pauseBtn.textContent = '⏸ 暂停'; }
+  });
+
+  function beginGame() {
+    overlay.classList.add('hidden');
+    paused = false; pauseBtn.textContent = '⏸ 暂停';
+    Promise.resolve(loaded).then(function () {
+      if (!ctrl) return;
+      ctrl.restart();
+      started = true;
+    });
+  }
+
+  function gameOver(finalScore, finalLevel) {
+    started = false;
+    // 本地存档
+    var newBest = window.IanLocal.setBest(SLUG, finalScore);
+    bestEl.textContent = window.IanLocal.best(SLUG);
+    // 云端上报
+    var p = Promise.resolve();
+    if (LOGGED_IN) {
+      p = window.IanAPI.submitScore(SLUG, finalScore, finalLevel).then(function (r) {
+        renderLB();
+        if (r && r.ok && r.rank && r.rank <= 20) {
+          window.IanToast('上榜!第 ' + r.rank + ' 名', 'ok');
+        }
+      });
+    }
+    p.finally(function () { showOver(finalScore, newBest); });
+  }
+
+  function showOver(s, newBest) {
+    overlay.classList.remove('hidden');
+    overlay.innerHTML =
+      '<div>' +
+        '<div class="ttl">游戏结束</div>' +
+        '<div class="sub">' + (newBest ? '🎉 刷新本地最高分!' : '再接再厉') + '</div>' +
+        '<div class="final-score">' + s + '</div>' +
+        '<button class="btn btn-primary" id="againBtn">🔄 再来一局</button>' +
+      '</div>';
+    document.getElementById('againBtn').addEventListener('click', beginGame);
+  }
+
+  function renderLB() {
+    window.IanAPI.leaderboard(SLUG).then(function (r) {
+      if (!r || !r.ok || !r.board || !r.board.length) {
+        lbEl.innerHTML = '<div class="lb-empty">还没有人上榜,快来抢占第一!</div>';
+        return;
+      }
+      lbEl.innerHTML = r.board.map(function (b, i) {
+        return '<div class="lb-row"><span class="lb-rank">' + (i+1) + '</span>' +
+               '<span class="lb-name">' + esc(b.username) + '</span>' +
+               '<span class="lb-score">' + b.score + '</span></div>';
+      }).join('');
+    });
+  }
+
+  function esc(s) {
+    var d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+  }
+
+  // 收藏
+  {% if current_user %}
+  var favBtn = document.getElementById('favBtn');
+  window.IanAPI.favList().then(function (r) {
+    if (r && r.ok && r.favorites && r.favorites.indexOf(SLUG) >= 0) {
+      favBtn.textContent = '★ 已收藏'; favBtn.classList.add('btn-primary');
+    }
+  });
+  favBtn.addEventListener('click', function () {
+    window.IanAPI.toggleFav(SLUG).then(function (r) {
+      if (!r || !r.ok) return;
+      if (r.favorite) { favBtn.textContent = '★ 已收藏'; favBtn.classList.add('btn-primary'); window.IanToast('已收藏','ok'); }
+      else { favBtn.textContent = '☆ 加入收藏'; favBtn.classList.remove('btn-primary'); }
+    });
+  });
+  {% endif %}
+})();
+</script>
+{% endblock %}

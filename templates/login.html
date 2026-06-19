@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}{% if mode == 'register' %}注册{% else %}登录{% endif %} · iangame{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <a class="brand" href="{{ url_for('index') }}"><span class="hex">⬡</span><span><b>IAN</b>GAME</span></a>
+    <h2>{% if mode == 'register' %}创建账号{% else %}欢迎回来{% endif %}</h2>
+    <form id="authForm">
+      <div class="field">
+        <label>用户名</label>
+        <input type="text" id="username" autocomplete="username" placeholder="2-20 位" required>
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" id="password" autocomplete="{% if mode == 'register' %}new-password{% else %}current-password{% endif %}" placeholder="至少 4 位" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">
+        {% if mode == 'register' %}注 册{% else %}登 录{% endif %}
+      </button>
+      <div class="form-msg" id="msg"></div>
+    </form>
+    <div class="auth-switch">
+      {% if mode == 'register' %}
+        已有账号? <a href="{{ url_for('login') }}">去登录</a>
+      {% else %}
+        没有账号? <a href="{{ url_for('register') }}">立即注册</a>
+      {% endif %}
+    </div>
+    <p class="muted tiny" style="text-align:center;margin-top:16px">💡 游客也可直接玩全部游戏,登录仅用于云端记分</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var MODE = {{ mode|tojson }};
+  var form = document.getElementById('authForm');
+  var msg = document.getElementById('msg');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var u = document.getElementById('username').value.trim();
+    var p = document.getElementById('password').value;
+    msg.className = 'form-msg'; msg.textContent = '';
+    var fn = MODE === 'register' ? window.IanAPI.register : window.IanAPI.login;
+    fn(u, p).then(function (r) {
+      if (r && r.ok) {
+        msg.className = 'form-msg ok';
+        msg.textContent = MODE === 'register' ? '注册成功!' : '登录成功!';
+        window.IanToast(MODE === 'register' ? '欢迎加入 iangame!' : '登录成功', 'ok');
+        setTimeout(function () { window.location.href = '/'; }, 600);
+      } else {
+        msg.className = 'form-msg err';
+        msg.textContent = (r && r.error) || '操作失败';
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

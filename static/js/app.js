@@ -1,0 +1,96 @@
+/* ========================================================================
+   iangame 站点 JS —— API 客户端 + Toast + 游戏加载器
+   暴露: window.IanAPI, window.IanToast, window.IanGameLoader
+   游戏不依赖本文件;本文件只服务站点壳与 play 页。
+   ======================================================================== */
+(function () {
+  'use strict';
+
+  /* ---------- Toast ---------- */
+  function toast(msg, type) {
+    var host = document.getElementById('toastHost');
+    if (!host) { console.log('[toast]', msg); return; }
+    var el = document.createElement('div');
+    el.className = 'toast ' + (type || '');
+    el.textContent = msg;
+    host.appendChild(el);
+    setTimeout(function () {
+      el.style.transition = 'opacity .25s';
+      el.style.opacity = '0';
+      setTimeout(function () { el.remove(); }, 260);
+    }, 2600);
+  }
+
+  /* ---------- API 客户端 ---------- */
+  async function jget(url) {
+    var r = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+    return r.json();
+  }
+  async function jpost(url, body) {
+    var r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body || {})
+    });
+    return r.json().catch(function () { return { ok: false, error: '响应解析失败' }; });
+  }
+
+  var IanAPI = {
+    me:      function () { return jget('/api/me'); },
+    games:   function () { return jget('/api/games'); },
+    leaderboard: function (slug) { return jget('/api/leaderboard/' + encodeURIComponent(slug)); },
+    submitScore: function (slug, score, level) { return jpost('/api/score', { slug: slug, score: score, level: level || 0 }); },
+    login:   function (u, p) { return jpost('/api/login', { username: u, password: p }); },
+    register:function (u, p) { return jpost('/api/register', { username: u, password: p }); },
+    logout:  function () { return jpost('/api/logout'); },
+    favList: function () { return jget('/api/favorite'); },
+    toggleFav: function (slug) { return jpost('/api/favorite', { slug: slug }); },
+    profile: function () { return jget('/api/profile'); },
+  };
+
+  /* ---------- 本地存档(游客也用) ---------- */
+  var LocalStore = {
+    best: function (slug) { return parseInt(localStorage.getItem('ian:best:' + slug) || '0', 10); },
+    setBest: function (slug, v) {
+      var cur = LocalStore.best(slug);
+      if (v > cur) { localStorage.setItem('ian:best:' + slug, String(v)); return true; }
+      return false;
+    },
+  };
+
+  /* ---------- 游戏加载器(play 页核心) ---------- */
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src; s.async = true;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('加载失败: ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  var IanGameLoader = {
+    /**
+     * 挂载一款游戏。
+     * @param {Object} opts { slug, canvas, hooks }
+     * @returns controller(pause/resume/restart/destroy)
+     */
+    async mount(opts) {
+      var slug = opts.slug, canvas = opts.canvas, hooks = opts.hooks || {};
+      await loadScript('/static/games/' + slug + '/game.js');
+      if (!window.IanGame || typeof window.IanGame.init !== 'function') {
+        throw new Error('游戏未实现 window.IanGame.init 接口');
+      }
+      var ctrl = window.IanGame.init(canvas, hooks);
+      // 用完即删全局,避免下一款游戏残留
+      delete window.IanGame;
+      return ctrl;
+    }
+  };
+
+  window.IanToast = toast;
+  window.IanAPI = IanAPI;
+  window.IanLocal = LocalStore;
+  window.IanGameLoader = IanGameLoader;
+})();

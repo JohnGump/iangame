@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}iangame · 12款霓虹小游戏 即开即玩{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- HERO -->
+  <section class="hero">
+    <span class="hero-tag">⚡ 立即开玩 · 无需登录</span>
+    <h1>霓虹 <span>竞技场</span></h1>
+    <p>{{ all_games|length }} 款经典 HTML5 小游戏,植物大战僵尸、拳皇、俄罗斯方块……全程免费,打开就玩。</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="{{ url_for('games_page') }}">▶ 开始游戏</a>
+      {% if not current_user %}<a class="btn btn-ghost" href="{{ url_for('register') }}">注册享云端记分</a>{% endif %}
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><b>{{ all_games|length }}</b><span>款游戏</span></div>
+      <div class="hero-stat"><b>{{ category_counts|length }}</b><span>种类型</span></div>
+      <div class="hero-stat"><b>∞</b><span>免费畅玩</span></div>
+    </div>
+  </section>
+
+  <!-- 热门推荐 -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="dot"></span>热门推荐</div>
+      <a class="section-link" href="{{ url_for('games_page') }}">查看全部 ›</a>
+    </div>
+    <div class="game-grid">
+      {% for g in hot_games %}
+      <a class="game-card" href="{{ url_for('play', slug=g.slug) }}" style="--cover:{{ g.color }}">
+        <div class="game-cover">
+          <span class="tag">{{ category_labels.get(g.category, g.category) }}</span>
+          {{ g.icon }}
+        </div>
+        <div class="game-body">
+          <h3>{{ g.name }}</h3>
+          <div class="desc">{{ g.desc }}</div>
+          <div class="play"><span class="btn btn-primary btn-sm btn-block">▶ 玩</span></div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- 全部游戏 -->
+  <section class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="dot"></span>全部游戏</div>
+    </div>
+    <div class="filters" id="filters">
+      <button class="chip active" data-cat="all">全部</button>
+      {% for cat, cnt in category_counts.items() %}
+      <button class="chip" data-cat="{{ cat }}">{{ category_labels.get(cat, cat) }} · {{ cnt }}</button>
+      {% endfor %}
+    </div>
+    <div class="game-grid compact" id="allGrid">
+      {% for g in all_games %}
+      <a class="game-card" data-cat="{{ g.category }}" href="{{ url_for('play', slug=g.slug) }}" style="--cover:{{ g.color }}">
+        <div class="game-cover">
+          <span class="tag">{{ category_labels.get(g.category, g.category) }}</span>
+          {{ g.icon }}
+        </div>
+        <div class="game-body">
+          <h3>{{ g.name }}</h3>
+          <div class="desc">{{ g.desc }}</div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // 分类筛选
+  document.getElementById('filters').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip'); if (!b) return;
+    document.querySelectorAll('#filters .chip').forEach(function (c) { c.classList.toggle('active', c === b); });
+    var cat = b.dataset.cat;
+    document.querySelectorAll('#allGrid .game-card').forEach(function (card) {
+      card.style.display = (cat === 'all' || card.dataset.cat === cat) ? '' : 'none';
+    });
+  });
+</script>
+{% endblock %}

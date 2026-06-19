@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}游戏大厅 · iangame{% endblock %}
+
+{% block content %}
+<div class="container">
+  <section class="section" style="padding-top:32px">
+    <div class="section-head">
+      <div class="section-title"><span class="dot"></span>游戏大厅</div>
+      <span class="muted tiny">共 {{ all_games|length }} 款</span>
+    </div>
+    <div class="filters" id="filters">
+      <button class="chip active" data-cat="all">全部</button>
+      {% for cat, cnt in category_counts.items() %}
+      <button class="chip" data-cat="{{ cat }}">{{ category_labels.get(cat, cat) }} · {{ cnt }}</button>
+      {% endfor %}
+    </div>
+    <div class="game-grid" id="grid">
+      {% for g in all_games %}
+      <a class="game-card" data-cat="{{ g.category }}" href="{{ url_for('play', slug=g.slug) }}" style="--cover:{{ g.color }}">
+        <div class="game-cover">
+          <span class="tag">{{ category_labels.get(g.category, g.category) }}</span>
+          {{ g.icon }}
+        </div>
+        <div class="game-body">
+          <h3>{{ g.name }}</h3>
+          <div class="desc">{{ g.desc }}</div>
+          <div class="play"><span class="btn btn-primary btn-sm btn-block">▶ 开始</span></div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('filters').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip'); if (!b) return;
+    document.querySelectorAll('#filters .chip').forEach(function (c) { c.classList.toggle('active', c === b); });
+    var cat = b.dataset.cat;
+    document.querySelectorAll('#grid .game-card').forEach(function (card) {
+      card.style.display = (cat === 'all' || card.dataset.cat === cat) ? '' : 'none';
+    });
+  });
+</script>
+{% endblock %}

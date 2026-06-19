@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}404 · 页面走丢了{% endblock %}
+{% block content %}
+<div class="container" style="min-height:60vh;display:grid;place-items:center;text-align:center;padding-top:40px">
+  <div>
+    <div style="font-family:var(--ff-title);font-size:88px;font-weight:900" class="text-grad">404</div>
+    <p class="muted mt-8">这个页面像一局结束的游戏 —— 不存在了。</p>
+    <a class="btn btn-primary mt-24" href="{{ url_for('index') }}">回到首页</a>
+  </div>
+</div>
+{% endblock %}
