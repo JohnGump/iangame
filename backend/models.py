@@ -45,6 +45,14 @@ class Favorite(db.Model):
     )
 
 
+class LoginAttempt(db.Model):
+    """登录失败记录(跨 worker 共享,防暴力破解)。定期清理过期记录。"""
+    __tablename__ = 'login_attempts'
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(64), nullable=False, index=True)
+    ts = db.Column(db.Float, nullable=False)  # 失败时间戳(epoch 秒)
+
+
 # 12 款游戏种子数据
 SEED_GAMES = [
     {"slug": "pvz", "name": "植物大战僵尸", "category": "defense", "icon": "🌻", "color": "#5fd35f",

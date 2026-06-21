@@ -1,18 +1,90 @@
 import re
+import time
+import hmac
+import hashlib
 from functools import wraps
 
 from flask import (
     Flask, render_template, request, session, redirect,
     url_for, jsonify, g, abort,
 )
-from sqlalchemy import func
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from config import Config
 from extensions import db
-from models import User, Game, Score, Favorite, SEED_GAMES, CATEGORY_LABELS
+from models import User, Game, Score, Favorite, LoginAttempt, SEED_GAMES, CATEGORY_LABELS
 
 _USERNAME_RE = re.compile(r'^[\w\u4e00-\u9fa5]{2,20}$')
+
+# 敏感用户名黑名单:防止注册 admin/root/login 等误导性或特权暗示的用户名
+_USERNAME_BLACKLIST = {
+    'admin', 'administrator', 'root', 'system', 'login', 'logout',
+    'register', 'api', 'static', 'games', 'play', 'profile',
+    'iangame', 'support', 'help', 'test', 'guest', 'user',
+    'me', 'settings', 'config', 'console', 'superuser', 'operator',
+}
+
+# ============================================================
+# 登录速率限制(基于 SQLite,跨 Gunicorn worker 共享;防暴力破解)
+# ============================================================
+LOGIN_WINDOW = 60          # 60 秒窗口
+LOGIN_MAX_FAIL = 5         # 窗口内最多 5 次失败
+
+
+def _login_fail_count(ip):
+    """该 IP 在窗口内的失败次数(顺带清理过期记录)"""
+    now = time.time()
+    cutoff = now - LOGIN_WINDOW
+    # 清理过期(顺带,防表膨胀;偶尔执行即可,加随机降低多 worker 同时清理)
+    if int(now) % 10 == 0:
+        db.session.query(LoginAttempt).filter(LoginAttempt.ts < cutoff).delete()
+        db.session.commit()
+    return db.session.query(LoginAttempt).filter(
+        LoginAttempt.ip == ip, LoginAttempt.ts > cutoff).count()
+
+
+def _login_record_fail(ip):
+    """记录一次登录失败"""
+    db.session.add(LoginAttempt(ip=ip, ts=time.time()))
+    db.session.commit()
+
+
+# ============================================================
+# CSRF 防护:校验同源(写操作必须来自本站)
+# ============================================================
+def _csrf_check():
+    """对会改变状态的 POST 请求校验 Origin/Referer 同源。
+
+    策略:只要 Origin 或 Referer 出现,就必须匹配本站 host;不匹配一律拒绝。
+    两者都缺失时(非浏览器/curl 裸请求),拒绝 JSON 请求。
+    """
+    if request.method != 'POST':
+        return True
+    host = request.host
+    origin = request.headers.get('Origin') or ''
+    referer = request.headers.get('Referer') or ''
+    # 收集所有提供的来源头
+    provided = []
+    for val in (origin, referer):
+        if not val:
+            continue
+        val_host = val
+        for prefix in ('https://', 'http://'):
+            if val_host.startswith(prefix):
+                val_host = val_host[len(prefix):].split('/')[0]
+                break
+        provided.append(val_host)
+    # 有提供来源头 → 至少一个必须等于本站 host(有但不匹配=跨站,拒绝)
+    if provided:
+        return host in provided
+    # 没有任何来源头:浏览器 fetch(form/json)总会带,缺失视为可疑,拒绝 JSON
+    ct = request.headers.get('Content-Type', '')
+    if 'application/json' in ct:
+        return False
+    return True
 
 
 def login_required(f):
@@ -26,14 +98,32 @@ def login_required(f):
     return _w
 
 
+def csrf_required(f):
+    """装饰器:对该视图强制 CSRF 同源校验"""
+    @wraps(f)
+    def _w(*a, **kw):
+        if not _csrf_check():
+            return jsonify(ok=False, error='跨站请求被拒绝(CSRF 校验失败)'), 403
+        return f(*a, **kw)
+    return _w
+
+
 def create_app(config_class=Config):
     app = Flask(__name__, static_folder='../static', template_folder='../templates')
     app.config.from_object(config_class)
+    # 经 Cloudflare → cloudflared → Nginx → Gunicorn 多层代理
+    # ProxyFix 让 request.remote_addr 取真实客户端 IP(限流/日志用)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_proto=1, x_host=1)
     db.init_app(app)
 
     with app.app_context():
         db.create_all()
         _seed()
+
+    # ---- 安全响应头统一由 Nginx 设置(避免反代时与 Nginx 重复叠加)----
+    @app.after_request
+    def _security_headers(resp):
+        return resp
 
     # ---- 每请求加载当前用户 ----
     @app.before_request
@@ -69,7 +159,11 @@ def create_app(config_class=Config):
         game = Game.query.filter_by(slug=slug).first()
         if not game:
             abort(404)
-        return render_template('play.html', game=game)
+        # 为登录用户签发短期游戏令牌(用于提交分数时校验,防直接调 API 刷分)
+        game_token = ''
+        if g.user:
+            game_token = _issue_game_token(app, g.user.id)
+        return render_template('play.html', game=game, game_token=game_token)
 
     @app.route('/login')
     def login():
@@ -91,34 +185,47 @@ def create_app(config_class=Config):
 
     # ================= API =================
     @app.post('/api/register')
+    @csrf_required
     def api_register():
         d = request.get_json(silent=True) or {}
         u = (d.get('username') or '').strip()
         p = d.get('password') or ''
         if not _USERNAME_RE.match(u):
             return jsonify(ok=False, error='用户名需 2-20 位(字母/数字/下划线/中文)'), 400
+        if u.lower() in _USERNAME_BLACKLIST:
+            return jsonify(ok=False, error='该用户名为保留名,不可注册'), 400
         if not (4 <= len(p) <= 60):
             return jsonify(ok=False, error='密码需 4-60 位'), 400
-        if User.query.filter_by(username=u).first():
-            return jsonify(ok=False, error='用户名已被占用'), 409
         user = User(username=u, password_hash=generate_password_hash(p))
         db.session.add(user)
-        db.session.commit()
+        try:
+            # 竞态安全:并发注册同名时,唯一约束触发 IntegrityError → 409
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify(ok=False, error='用户名已被占用'), 409
         session['uid'] = user.id
         return jsonify(ok=True, user=_pub(user))
 
     @app.post('/api/login')
+    @csrf_required
     def api_login():
+        ip = request.remote_addr or '0.0.0.0'
+        if _login_fail_count(ip) >= LOGIN_MAX_FAIL:
+            return jsonify(ok=False, error='尝试过于频繁,请 1 分钟后再试'), 429
         d = request.get_json(silent=True) or {}
         u = (d.get('username') or '').strip()
         p = d.get('password') or ''
         user = User.query.filter_by(username=u).first()
+        # 统一报错 + 失败计数(无论用户名是否存在都计,防止用户名枚举探测)
         if not user or not check_password_hash(user.password_hash, p):
+            _login_record_fail(ip)
             return jsonify(ok=False, error='用户名或密码错误'), 401
         session['uid'] = user.id
         return jsonify(ok=True, user=_pub(user))
 
     @app.post('/api/logout')
+    @csrf_required
     def api_logout():
         session.pop('uid', None)
         return jsonify(ok=True)
@@ -145,9 +252,14 @@ def create_app(config_class=Config):
 
     @app.post('/api/score')
     @login_required
+    @csrf_required
     def api_score():
         d = request.get_json(silent=True) or {}
         slug = (d.get('slug') or '').strip()
+        token = d.get('token') or ''
+        # 令牌校验:必须携带本会话签发的有效令牌,防直接调 API 刷分
+        if not _verify_game_token(app, g.user.id, token):
+            return jsonify(ok=False, error='令牌无效或已过期,请刷新页面重试'), 403
         try:
             score = int(d.get('score') or 0)
             level = int(d.get('level') or 0)
@@ -157,9 +269,15 @@ def create_app(config_class=Config):
             return jsonify(ok=False, error='游戏不存在'), 404
         if score < 0 or score > app.config['MAX_SCORE_PER_SUBMIT']:
             return jsonify(ok=False, error='分数非法'), 400
+        if level < 0 or level > 9999:
+            return jsonify(ok=False, error='关卡非法'), 400
         sc = Score(user_id=g.user.id, game_slug=slug, score=score, level=level)
         db.session.add(sc)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify(ok=False, error='提交失败'), 400
         higher = db.session.query(func.count(Score.id)).filter(
             Score.game_slug == slug, Score.score > score).scalar() or 0
         rank = higher + 1
@@ -175,6 +293,7 @@ def create_app(config_class=Config):
 
     @app.post('/api/favorite')
     @login_required
+    @csrf_required
     def api_fav_toggle():
         d = request.get_json(silent=True) or {}
         slug = (d.get('slug') or '').strip()
@@ -185,8 +304,12 @@ def create_app(config_class=Config):
             db.session.delete(fav)
             db.session.commit()
             return jsonify(ok=True, favorite=False)
+        # 竞态安全:并发重复收藏时唯一约束兜底
         db.session.add(Favorite(user_id=g.user.id, game_slug=slug))
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
         return jsonify(ok=True, favorite=True)
 
     @app.get('/api/profile')
@@ -220,11 +343,47 @@ def create_app(config_class=Config):
             return jsonify(ok=False, error='not found'), 404
         return render_template('404.html'), 404
 
+    @app.errorhandler(429)
+    def _429(e):
+        return jsonify(ok=False, error='请求过于频繁,请稍后再试'), 429
+
     return app
 
 
 def _pub(user):
     return {'id': user.id, 'username': user.username}
+
+
+# ============================================================
+# 游戏令牌:登录用户进入游戏页时签发,提交分数时校验
+# 防"不玩游戏、直接构造 POST /api/score 刷分"。令牌与用户绑定且有 TTL。
+# ============================================================
+def _issue_game_token(app, user_id):
+    key = app.config['GAME_TOKEN_KEY'].encode()
+    exp = int(time.time()) + app.config['GAME_TOKEN_TTL']
+    payload = f'{user_id}:{exp}'
+    sig = hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
+    return f'{payload}:{sig}'
+
+
+def _verify_game_token(app, user_id, token):
+    if not token or ':' not in token:
+        return False
+    try:
+        uid_s, exp_s, sig = token.rsplit(':', 2)
+        uid = int(uid_s)
+        exp = int(exp_s)
+    except (ValueError, TypeError):
+        return False
+    if uid != user_id:
+        return False
+    if exp < time.time():
+        return False  # 过期
+    key = app.config['GAME_TOKEN_KEY'].encode()
+    payload = f'{uid}:{exp}'
+    expect = hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
+    # hmac.compare_digest 防时序攻击
+    return hmac.compare_digest(expect, sig)
 
 
 def _game_pub(gm):

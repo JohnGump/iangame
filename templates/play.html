@@ -66,6 +66,8 @@
 (function () {
   var SLUG = {{ game.slug|tojson }};
   var LOGGED_IN = {% if current_user %}true{% else %}false{% endif %};
+  // 服务端签发的短期游戏令牌(登录用户),提交分数时必须回传,防直接调 API 刷分
+  var GAME_TOKEN = {{ game_token|default('')|tojson }};
   var canvas = document.getElementById('gameCanvas');
   var overlay = document.getElementById('overlay');
   var startBtn = document.getElementById('startBtn');
@@ -127,7 +129,7 @@
     // 云端上报
     var p = Promise.resolve();
     if (LOGGED_IN) {
-      p = window.IanAPI.submitScore(SLUG, finalScore, finalLevel).then(function (r) {
+      p = window.IanAPI.submitScore(SLUG, finalScore, finalLevel, GAME_TOKEN).then(function (r) {
         renderLB();
         if (r && r.ok && r.rank && r.rank <= 20) {
           window.IanToast('上榜!第 ' + r.rank + ' 名', 'ok');

@@ -40,7 +40,7 @@
     me:      function () { return jget('/api/me'); },
     games:   function () { return jget('/api/games'); },
     leaderboard: function (slug) { return jget('/api/leaderboard/' + encodeURIComponent(slug)); },
-    submitScore: function (slug, score, level) { return jpost('/api/score', { slug: slug, score: score, level: level || 0 }); },
+    submitScore: function (slug, score, level, token) { return jpost('/api/score', { slug: slug, score: score, level: level || 0, token: token || '' }); },
     login:   function (u, p) { return jpost('/api/login', { username: u, password: p }); },
     register:function (u, p) { return jpost('/api/register', { username: u, password: p }); },
     logout:  function () { return jpost('/api/logout'); },
