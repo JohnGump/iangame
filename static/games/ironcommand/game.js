@@ -55,10 +55,12 @@
     var score, kills;
     // 输入
     var mouse, dragStart, isDragging;
+    var lastClick = { t: 0, kind: null, count: 0 };  // 双击/三连击时序检测
 
     function reset() {
       cam = { x: 0, y: 0 };
       panelScroll = 0;
+      lastClick = { t: 0, kind: null, count: 0 };
       keys = {};
       oreP = 1500; oreE = 1000; powerP = 0; powerE = 0;
       buildings = []; units = []; bullets = []; particles = []; floatTexts = [];
@@ -93,13 +95,16 @@
     function addBuilding(kind, team, x, y) {
       var def = BUILDINGS[kind];
       buildings.push({ kind: kind, team: team, x: x, y: y, hp: def.hp, maxhp: def.hp,
-                       t: def.build, building: def.build > 0, prod: def.atk ? 0 : null });
+                       t: def.build, building: def.build > 0, prod: def.atk ? 0 : null,
+                       rally: null });  // 集结点(兵营/车厂用),默认无
     }
     function addUnit(kind, team, x, y) {
       var def = UNITS[kind];
-      units.push({ kind: kind, team: team, x: x, y: y, hp: def.hp, maxhp: def.hp, def: def,
-                   tx: x, ty: y, cmd: 'idle', target: null, cool: 0, cargo: 0,
-                   miningState: 'toMine', mineTarget: null });
+      var u = { kind: kind, team: team, x: x, y: y, hp: def.hp, maxhp: def.hp, def: def,
+                tx: x, ty: y, cmd: 'idle', target: null, cool: 0, cargo: 0,
+                miningState: 'toMine', mineTarget: null };
+      units.push(u);
+      return u;
     }
     function recomputePower(team) {
       var p = 0;
@@ -140,11 +145,20 @@
         var eff = powerOk(q.team) ? 1 : 0.4;   // 缺电减速
         q.t -= dt * eff;
         if (q.t <= 0) {
-          // 出生:在来源建筑旁
-          var src = buildings.filter(function (b) { return b.team === q.team && b.kind === q.from && !b.building; })[0];
+          // 出生:从队列分配的来源建筑(bid);若该建筑已被毁则 fallback 到同类第一个
+          var src = q.bid;
+          if (!src || src.hp <= 0 || src.building) {
+            src = buildings.filter(function (b) { return b.team === q.team && b.kind === q.from && !b.building; })[0];
+          }
           if (src) {
-            var ox = src.x + (Math.random() * 60 - 30), oy = src.y + 90 + (Math.random() * 20);
-            addUnit(q.kind, q.team, Math.max(20, ox), Math.min(MAP_H - 20, oy));
+            // 默认部署点:建筑正下方(固定,去随机抖动)
+            var ox = src.x, oy = Math.min(MAP_H - 20, src.y + 70);
+            var newU = addUnit(q.kind, q.team, ox, oy);
+            // 若该建筑设了集结点,新单位出生后自动前往
+            if (newU && src.rally) {
+              newU.cmd = 'move'; newU.target = null;
+              newU.tx = src.rally.x; newU.ty = src.rally.y;
+            }
           }
           prodQueue.splice(i, 1);
         }
@@ -393,21 +407,57 @@
     function tryProduce(team, kind) {
       if (!canProduce(team, kind)) return;
       var cost = UNITS[kind].cost;
-      if (team === 'enemy') { if (oreE < cost) return; oreE -= cost; } else { if (oreP < cost) return; oreP -= cost; }
-      prodQueue.push({ team: team, from: UNITS[kind].from, kind: kind, t: UNITS[kind].cost / 100 * 2 + 1, total: 0 });
+      if (team === 'enemy') { if (oreE < cost) return; } else { if (oreP < cost) return; }
+      if (!queueProduce(team, kind)) return;
+      if (team === 'enemy') oreE -= cost; else oreP -= cost;
     }
 
     // ---------- 玩家指令 ----------
+    // 卖出建筑:返还 50% 矿石,基地不可卖
+    function sellBuilding() {
+      if (selected.length !== 1 || !selected[0] || !selected[0].kind) return; // 仅建筑(有 kind 无 def)
+      var b = selected[0];
+      if (b.team !== 'player') return;
+      if (b.kind === 'base') { toast('建造厂不可卖出'); return; }
+      var refund = Math.floor(BUILDINGS[b.kind].cost * 0.5);
+      oreP += refund;
+      spark(b.x, b.y, '#ffb627', 24);
+      var idx = buildings.indexOf(b);
+      if (idx >= 0) buildings.splice(idx, 1);
+      recomputePower('player');
+      selected = [];
+      toast('💰 卖出 ' + BUILDINGS[b.kind].name + ',返还 ' + refund + ' 矿石');
+    }
     function cmdBuild(kind) {
       if (!canBuild('player', kind)) { toast('前置建筑未满足'); return; }
       if (oreP < BUILDINGS[kind].cost) { toast('矿石不足'); return; }
       buildMode = kind; nukeTargeting = false;
     }
+    // 为生产分配来源建筑:选同类建筑中队列最短的那个(多建筑均衡出兵)
+    function assignProducer(team, fromKind) {
+      var cands = buildings.filter(function (b) { return b.team === team && b.kind === fromKind && !b.building; });
+      if (!cands.length) return null;
+      if (cands.length === 1) return cands[0];
+      // 按该建筑正在排队的数量排序,取最少的
+      var best = cands[0], bestN = 1e9;
+      cands.forEach(function (b) {
+        var n = prodQueue.filter(function (q) { return q.bid === b; }).length;
+        if (n < bestN) { bestN = n; best = b; }
+      });
+      return best;
+    }
+    function queueProduce(team, kind) {
+      var def = UNITS[kind];
+      var src = assignProducer(team, def.from);
+      if (!src) return false;
+      prodQueue.push({ team: team, bid: src, from: def.from, kind: kind, t: def.cost / 100 * 2 + 1, total: 0 });
+      return true;
+    }
     function cmdProduce(kind) {
       if (!canProduce('player', kind)) { toast('需要 ' + BUILDINGS[UNITS[kind].from].name); return; }
       if (oreP < UNITS[kind].cost) { toast('矿石不足'); return; }
+      if (!queueProduce('player', kind)) { toast('没有可用的生产建筑'); return; }
       oreP -= UNITS[kind].cost;
-      prodQueue.push({ team: 'player', from: UNITS[kind].from, kind: kind, t: UNITS[kind].cost / 100 * 2 + 1, total: 0 });
       toast(UNITS[kind].name + ' 生产中');
     }
     function placeBuilding(wx, wy) {
@@ -524,13 +574,23 @@
         ctx.fillRect(w.x - 30, w.y - 30, 60, 60); ctx.globalAlpha = 1;
         ctx.strokeStyle = '#3da9fc'; ctx.strokeRect(w.x - 30, w.y - 30, 60, 60);
       }
-      // 核弹目标圈
+      // 核弹目标圈 + 范围填充
       if (nukeTargeting && mouse) {
         var nw = screenToWorld(mouse.x, mouse.y);
-        ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2; ctx.globalAlpha = 0.6;
-        ctx.beginPath(); ctx.arc(nw.x, nw.y, 220, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(255,77,77,0.12)'; ctx.beginPath(); ctx.arc(nw.x, nw.y, 220, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.8;
+        ctx.beginPath(); ctx.arc(nw.x, nw.y, 220, 0, 7); ctx.stroke();
+        ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.arc(nw.x, nw.y, 100, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+        ctx.globalAlpha = 1; ctx.lineWidth = 1;
       }
       ctx.restore();
+      // 核弹目标态全屏红罩 + 提示(屏幕坐标层)
+      if (nukeTargeting) {
+        ctx.fillStyle = 'rgba(255,77,77,0.08)'; ctx.fillRect(0, 0, VW, VH);
+        ctx.fillStyle = '#ff4d4d'; ctx.font = 'bold 22px Rajdhani'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('☢️ 点击地图选择核弹落点(右键/ESC 取消)', VW / 2, VH - 40);
+        ctx.textBaseline = 'alphabetic';
+      }
       // HUD
       drawHUD();
       drawMinimap();
@@ -579,8 +639,32 @@
       ctx.strokeStyle = shade(col, 0.5); ctx.lineWidth = 1.5;
       poly3D(S * 0.82, H3D * 0.9, 'top'); ctx.stroke(); ctx.lineWidth = 1;
       // —— 建筑差异化造型(顶面上的结构) ——
-      drawBuildingTop(b.kind, col, H3D);
+      drawBuildingTop(b, col, H3D);
       ctx.restore();
+      // 选中态视觉反馈(己方建筑被选中时):四角直角标记 + 旋转光环
+      var isSelB = selected.indexOf(b) >= 0;
+      if (isSelB && b.team === 'player') {
+        ctx.strokeStyle = '#2ee6a6'; ctx.lineWidth = 2;
+        var cs = 42 + Math.sin(frame * 0.1) * 2;
+        // 四角 L 形标记
+        [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(function (s) {
+          var x = b.x + s[0] * cs, y = b.y + s[1] * cs;
+          ctx.beginPath(); ctx.moveTo(x, y - s[1] * 9); ctx.lineTo(x, y); ctx.lineTo(x - s[0] * 9, y); ctx.stroke();
+        });
+        ctx.lineWidth = 1;
+      }
+      // 集结点(兵营/车厂设了 rally):旗帜 + 虚线连线
+      if (b.rally && (b.kind === 'barracks' || b.kind === 'warfactory')) {
+        ctx.strokeStyle = 'rgba(46,230,166,0.5)'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(b.x, b.y + 30); ctx.lineTo(b.rally.x, b.rally.y); ctx.stroke();
+        ctx.setLineDash([]);
+        // 旗帜
+        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(b.rally.x, b.rally.y - 14); ctx.lineTo(b.rally.x, b.rally.y + 2); ctx.stroke();
+        ctx.fillStyle = '#2ee6a6';
+        ctx.beginPath(); ctx.moveTo(b.rally.x, b.rally.y - 14); ctx.lineTo(b.rally.x + 10, b.rally.y - 11); ctx.lineTo(b.rally.x, b.rally.y - 8); ctx.fill();
+        ctx.lineWidth = 1;
+      }
       // 血条
       if (b.hp < b.maxhp) drawBar(b.x, b.y - 46, b.hp / b.maxhp, 56);
       // —— 建筑名标签(半透明底条 + 白字)——
@@ -611,52 +695,112 @@
       else { r *= (1 + t); g *= (1 + t); b *= (1 + t); }
       return 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ')';
     }
-    // 每种建筑在顶面上画独特结构(让玩家一眼区分)
-    function drawBuildingTop(kind, col, H) {
-      var accent = shade(col, 0.6);
-      ctx.fillStyle = accent; ctx.strokeStyle = accent; ctx.lineWidth = 2;
+    // 每种建筑在顶面上画独特精细结构(让玩家一眼区分)
+    function drawBuildingTop(b, col, H) {
+      var kind = b.kind;
+      var accent = shade(col, 0.6), mid = shade(col, 0.3), dark = shade(col, -0.2);
       if (kind === 'base') {
-        // 中心圆顶 + 四角塔楼
-        ctx.fillStyle = shade(col, 0.4);
-        ctx.beginPath(); ctx.arc(0, H, 9, 0, 7); ctx.fill();
-        ctx.fillStyle = accent;
-        [[-14,-6],[14,-6],[-14,12],[14,12]].forEach(function(p){ ctx.beginPath(); ctx.arc(p[0],p[1]+H,3,0,7); ctx.fill(); });
+        // 建造厂:中央高圆顶(多层渐变)+ 四角塔楼 + 顶部飘旗
+        ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(0, H, 11, 0, 7); ctx.fill();
+        ctx.fillStyle = shade(col, 0.5); ctx.beginPath(); ctx.arc(0, H - 3, 8, 0, 7); ctx.fill();
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, H - 5, 4, 0, 7); ctx.fill();
+        // 四角塔楼
+        ctx.fillStyle = dark;
+        [[-15,-7],[15,-7],[-15,11],[15,11]].forEach(function (p) { ctx.fillRect(p[0] - 2, p[1] + H - 4, 4, 8); });
+        // 旗杆 + 飘动的旗
+        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, H - 5); ctx.lineTo(0, H - 18); ctx.stroke();
+        var fw = Math.sin(frame * 0.1) * 2 + 6;
+        ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, H - 18); ctx.lineTo(fw + 5, H - 15); ctx.lineTo(0, H - 12); ctx.fill();
+        ctx.lineWidth = 1;
       } else if (kind === 'power') {
-        // 三根冷却塔(小圆柱)
-        ctx.fillStyle = shade(col, 0.3);
-        [-12,0,12].forEach(function(dx){ ctx.fillRect(dx-3, H-14, 6, 14); ctx.beginPath(); ctx.arc(dx, H-14, 4, 0, 7); ctx.fill(); });
+        // 发电厂:三根冷却塔(带圆顶)+ 顶部红灯 + 蒸汽雾
+        [-13, 0, 13].forEach(function (dx, i) {
+          ctx.fillStyle = mid; ctx.fillRect(dx - 4, H - 16, 8, 16);
+          ctx.fillStyle = shade(col, 0.5); ctx.beginPath(); ctx.arc(dx, H - 16, 5, 0, 7); ctx.fill();
+          ctx.fillStyle = accent; ctx.fillRect(dx - 1, H - 19, 2, 4);
+          // 蒸汽(向上飘动的半透明白)
+          var rise = (frame * 0.5 + i * 30) % 40;
+          ctx.fillStyle = 'rgba(255,255,255,' + (0.3 - rise / 130) + ')';
+          ctx.beginPath(); ctx.arc(dx, H - 22 - rise * 0.3, 3 + rise * 0.05, 0, 7); ctx.fill();
+        });
       } else if (kind === 'refinery') {
-        // 大烟囱 + 矿石仓
-        ctx.fillStyle = shade(col, 0.35); ctx.fillRect(8, H-18, 10, 18);
-        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(13, H-18, 6, 0, 7); ctx.fill();
-        ctx.fillStyle = MINE_COLOR; ctx.fillRect(-16, H-6, 20, 6);
+        // 精炼厂:大烟囱(冒烟)+ 矿石传送带 + 金色矿堆
+        ctx.fillStyle = mid; ctx.fillRect(9, H - 22, 11, 22);
+        ctx.fillStyle = dark; ctx.fillRect(9, H - 22, 11, 4);
+        ctx.fillStyle = '#ff4d4d'; ctx.fillRect(12, H - 20, 5, 2); // 烟囱红条
+        // 烟
+        var sr = (frame * 0.4) % 30;
+        ctx.fillStyle = 'rgba(180,180,180,' + (0.35 - sr / 90) + ')';
+        ctx.beginPath(); ctx.arc(14, H - 26 - sr * 0.3, 4 + sr * 0.08, 0, 7); ctx.fill();
+        // 传送带
+        ctx.fillStyle = '#444'; ctx.fillRect(-18, H - 4, 24, 5);
+        ctx.fillStyle = '#666'; for (var bi = 0; bi < 5; bi++) ctx.fillRect(-18 + bi * 5 + (frame % 5), H - 4, 2, 5);
+        // 金矿堆
+        ctx.fillStyle = MINE_COLOR; ctx.beginPath(); ctx.moveTo(-16, H + 2); ctx.lineTo(-10, H - 6); ctx.lineTo(-4, H + 2); ctx.fill();
+        ctx.fillStyle = shade(MINE_COLOR, -0.2); ctx.beginPath(); ctx.moveTo(-10, H - 6); ctx.lineTo(-4, H + 2); ctx.lineTo(-7, H + 2); ctx.fill();
       } else if (kind === 'barracks') {
-        // 五角星徽标(兵营)
-        ctx.fillStyle = accent; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('★', 0, H - 2);
+        // 兵营:尖顶营房 + ★军徽 + 两侧岗亭
+        ctx.fillStyle = mid;
+        ctx.beginPath(); ctx.moveTo(-14, H + 4); ctx.lineTo(0, H - 12); ctx.lineTo(14, H + 4); ctx.fill(); // 尖顶
+        ctx.fillStyle = dark; ctx.fillRect(-14, H + 2, 28, 4); // 屋檐
+        // 军徽
+        ctx.fillStyle = accent; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('★', 0, H - 1);
+        // 两侧岗亭
+        ctx.fillStyle = dark; ctx.fillRect(-17, H - 4, 4, 10); ctx.fillRect(13, H - 4, 4, 10);
+        ctx.textBaseline = 'alphabetic';
       } else if (kind === 'warfactory') {
-        // 履带/齿轮标志
-        ctx.fillStyle = shade(col, 0.3); ctx.beginPath(); ctx.arc(0, H, 11, 0, 7); ctx.fill();
-        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, H, 5, 0, 7); ctx.fill();
+        // 战车工厂:履带传送带(滚动)+ 中央齿轮(旋转)+ 起重机臂
+        ctx.fillStyle = '#333'; ctx.fillRect(-16, H + 0, 32, 5);
+        ctx.fillStyle = '#555'; for (var ti = 0; ti < 7; ti++) ctx.fillRect(-16 + ti * 5 + (frame % 5), H + 0, 3, 5);
+        // 齿轮(旋转)
+        ctx.save(); ctx.translate(0, H - 5); ctx.rotate(frame * 0.04);
+        ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill();
+        ctx.fillStyle = accent;
+        for (var gi = 0; gi < 8; gi++) { var ga = gi / 8 * 7; ctx.fillRect(Math.cos(ga) * 8 - 1.5, Math.sin(ga) * 8 - 1.5, 3, 3); }
+        ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
+        ctx.restore();
       } else if (kind === 'radar') {
-        // 雷达圆顶 + 旋转扫描线
-        ctx.fillStyle = shade(col, 0.35); ctx.beginPath(); ctx.arc(0, H, 13, Math.PI, 7); ctx.fill();
+        // 雷达站:抛物面圆顶 + 双旋转扫描线
+        ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(0, H, 14, Math.PI, 7); ctx.fill();
+        ctx.fillStyle = shade(col, 0.45); ctx.beginPath(); ctx.arc(0, H, 10, Math.PI, 7); ctx.fill();
+        // 扫描扇形
+        var ang = frame * 0.06;
+        ctx.fillStyle = 'rgba(0,224,255,0.25)';
+        ctx.beginPath(); ctx.moveTo(0, H); ctx.arc(0, H, 13, ang - 0.5, ang); ctx.fill();
         ctx.strokeStyle = accent; ctx.lineWidth = 2;
-        var ang = frame * 0.08;
-        ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(Math.cos(ang)*13, H + Math.sin(ang)*13); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(Math.cos(ang) * 13, H + Math.sin(ang) * 13); ctx.stroke();
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, H, 2.5, 0, 7); ctx.fill();
         ctx.lineWidth = 1;
       } else if (kind === 'turret') {
-        // 炮塔基座 + 旋转炮管(指向最近敌人)
-        ctx.fillStyle = shade(col, 0.25); ctx.beginPath(); ctx.arc(0, H, 12, 0, 7); ctx.fill();
-        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, H, 6, 0, 7); ctx.fill();
+        // 炮塔:基座 + 双联装炮管(指向最近敌人,补上之前漏画的炮管)
+        ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(0, H, 13, 0, 7); ctx.fill();
+        ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(0, H, 10, 0, 7); ctx.fill();
+        // 旋转炮管:指向最近敌人
+        var tgt = nearestEnemy(b.x, b.y, b.team, 250);
+        var ba = tgt ? Math.atan2(tgt.y - b.y, tgt.x - b.x) : (frame * 0.02);
+        ctx.save(); ctx.translate(0, H); ctx.rotate(ba);
+        ctx.fillStyle = '#222'; ctx.fillRect(0, -4, 20, 3); ctx.fillRect(0, 1, 20, 3); // 双联炮管
+        ctx.fillStyle = accent; ctx.fillRect(18, -4, 3, 3); ctx.fillRect(18, 1, 3, 3); // 炮口
+        ctx.restore();
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, H, 5, 0, 7); ctx.fill();
       } else if (kind === 'nuke') {
-        // 核弹发射井:同心圆 + 脉动警告灯
+        // 核弹井:同心圆发射井 + 升降井盖(脉动)+ 红色警告灯
         var pulse = 0.5 + 0.5 * Math.sin(frame * 0.12);
-        ctx.strokeStyle = accent; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(0, H, 13, 0, 7); ctx.stroke();
-        ctx.beginPath(); ctx.arc(0, H, 8, 0, 7); ctx.stroke();
+        var lift = (Math.sin(frame * 0.04) + 1) * 3;
+        ctx.strokeStyle = accent; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(0, H, 14, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, H, 10, 0, 7); ctx.stroke();
+        // 井内深色
+        ctx.fillStyle = '#1a0000'; ctx.beginPath(); ctx.arc(0, H, 8, 0, 7); ctx.fill();
+        // 升降井盖(导弹头)
+        ctx.fillStyle = shade(col, 0.4); ctx.beginPath(); ctx.arc(0, H - lift, 5, 0, 7); ctx.fill();
+        ctx.fillStyle = '#eaf0fb'; ctx.fillRect(-1, H - lift - 6, 2, 4);
+        // 警告灯
         ctx.fillStyle = 'rgba(255,77,77,' + pulse + ')';
-        ctx.beginPath(); ctx.arc(0, H, 4, 0, 7); ctx.fill();
+        ctx.shadowBlur = 8; ctx.shadowColor = '#ff4d4d';
+        ctx.beginPath(); ctx.arc(0, H, 3, 0, 7); ctx.fill();
+        ctx.shadowBlur = 0;
         ctx.lineWidth = 1;
       }
     }
@@ -738,32 +882,51 @@
       ctx.fillStyle = '#8b97b3'; ctx.fillText('🎯 击杀 ' + kills, 220, 30);
       if (hasBuilding('player', 'nuke')) {
         ctx.fillStyle = nukeCharge.player >= 1 ? '#ff4d4d' : '#8b97b3';
-        ctx.fillText('☢️ 核弹 ' + Math.floor(nukeCharge.player * 100) + '%', 330, 30);
+        ctx.fillText('☢️ ' + Math.floor(nukeCharge.player * 100) + '%', 330, 30);
       }
+      // 右侧:卖出按钮(选中可卖建筑时)+ 核弹按钮(有核弹井时)+ 敌方HP
+      var rx = VW - 20;
       ctx.fillStyle = '#8b97b3'; ctx.textAlign = 'right';
-      ctx.fillText('敌方基地 HP ' + (baseHp('enemy') | 0), VW - 20, 30);
-
-      // 右侧建造面板
-      drawBuildPanel();
-      // 核弹按钮
+      ctx.fillText('敌方基地HP ' + (baseHp('enemy') | 0), rx, 30);
+      rx -= ctx.measureText('敌方基地HP ' + (baseHp('enemy') | 0)).width + 14;
+      // 核弹按钮(顶栏,避开小地图)
       if (hasBuilding('player', 'nuke') && NUKE_ENABLED) {
-        var ny = VH - 96;
         var ready = nukeCharge.player >= 1;
-        ctx.fillStyle = ready ? 'rgba(255,77,77,0.3)' : 'rgba(6,9,18,0.7)';
-        roundRectH(VW - 152, ny, 144, 40, 8); ctx.fill();
-        ctx.strokeStyle = ready ? '#ff4d4d' : 'rgba(255,255,255,0.2)'; roundRectH(VW - 152, ny, 144, 40, 8); ctx.stroke();
-        ctx.fillStyle = ready ? '#ff4d4d' : '#8b97b3'; ctx.textAlign = 'center'; ctx.font = 'bold 14px Rajdhani';
-        ctx.fillText(nukeTargeting ? '点击地图落点' : (ready ? '☢️ 发射核弹' : '充能中 ' + Math.floor(nukeCharge.player * 100) + '%'), VW - 80, ny + 20);
+        var nbw = 92;
+        rx -= nbw;
+        ctx.fillStyle = ready ? 'rgba(255,77,77,0.35)' : 'rgba(6,9,18,0.6)';
+        roundRectH(rx, 14, nbw, 32, 8); ctx.fill();
+        ctx.strokeStyle = ready ? '#ff4d4d' : 'rgba(255,255,255,0.2)'; roundRectH(rx, 14, nbw, 32, 8); ctx.stroke();
+        ctx.fillStyle = ready ? '#ff4d4d' : '#8b97b3'; ctx.textAlign = 'center'; ctx.font = 'bold 13px Rajdhani';
+        ctx.fillText(nukeTargeting ? '点落点' : (ready ? '☢️ 发射' : '☢️ ' + Math.floor(nukeCharge.player * 100) + '%'), rx + nbw / 2, 30);
+        // 记录核弹按钮区域供点击检测
+        NUKE_BTN = { x: rx, y: 14, w: nbw, h: 32 };
+        rx -= 8;
+      } else { NUKE_BTN = null; }
+      // 卖出按钮(选中己方可卖建筑时)
+      SELL_BTN = null;
+      if (selected.length === 1 && selected[0] && selected[0].kind && !selected[0].def &&
+          selected[0].team === 'player' && selected[0].kind !== 'base') {
+        var sbw = 80; rx -= sbw;
+        ctx.fillStyle = 'rgba(255,182,39,0.25)'; roundRectH(rx, 14, sbw, 32, 8); ctx.fill();
+        ctx.strokeStyle = '#ffb627'; roundRectH(rx, 14, sbw, 32, 8); ctx.stroke();
+        ctx.fillStyle = '#ffd54a'; ctx.textAlign = 'center'; ctx.font = 'bold 13px Rajdhani';
+        ctx.fillText('💰 卖出', rx + sbw / 2, 30);
+        SELL_BTN = { x: rx, y: 14, w: sbw, h: 32, bid: selected[0] };
       }
+
+      // 左侧建造面板
+      drawBuildPanel();
       // 提示
       ctx.fillStyle = '#5a6580'; ctx.textAlign = 'left'; ctx.font = '12px Rajdhani';
-      ctx.fillText('左键框选·右键移动/攻击·WASD移视野', 12, VH - 14);
+      ctx.fillText('左键框选·右键移动/攻击·WASD移视野·双击选同兵种', 12, VH - 14);
     }
     function baseHp(team) {
       var b = buildings.filter(function (x) { return x.team === team && x.kind === 'base'; })[0];
       return b ? b.hp : 0;
     }
     var PANEL_X, PANEL_W, PANEL_ITEMS, panelScroll, panelScrollMax;
+    var NUKE_BTN = null, SELL_BTN = null;  // 顶栏按钮区域(每帧由 drawHUD 更新,供 onDown 检测)
     var PANEL_ITEM_H = 40;   // 每项高度(加大,容纳更大图标)
     function drawBuildPanel() {
       // 建造面板:【移到左侧】,避开右下小地图;固定宽度,可滚动
@@ -900,6 +1063,16 @@
       mouse = { x: sx, y: sy };
       // 核弹目标选择
       if (nukeTargeting) { var w = screenToWorld(sx, sy); launchNuke(w.x, w.y); return; }
+      // 卖出按钮(顶栏,选中可卖建筑时)
+      if (SELL_BTN && sx >= SELL_BTN.x && sx <= SELL_BTN.x + SELL_BTN.w && sy >= SELL_BTN.y && sy <= SELL_BTN.y + SELL_BTN.h) {
+        sellBuilding(); return;
+      }
+      // 核弹按钮(顶栏,有核弹井时)
+      if (NUKE_BTN && sx >= NUKE_BTN.x && sx <= NUKE_BTN.x + NUKE_BTN.w && sy >= NUKE_BTN.y && sy <= NUKE_BTN.y + NUKE_BTN.h) {
+        if (nukeCharge.player >= 1) { nukeTargeting = true; toast('点击地图选择核弹落点'); }
+        else toast('核弹充能中 ' + Math.floor(nukeCharge.player * 100) + '%');
+        return;
+      }
       // 点击建造面板(左侧)
       if (PANEL_ITEMS && sx >= PANEL_X && sx <= PANEL_X + PANEL_W) {
         for (var i = 0; i < PANEL_ITEMS.length; i++) {
@@ -911,11 +1084,6 @@
         }
         return; // 点在面板空白区,不触发框选
       }
-      // 核弹按钮
-      if (hasBuilding('player', 'nuke') && NUKE_ENABLED && sx >= VW - 152 && sy >= VH - 96 && sy <= VH - 56) {
-        if (nukeCharge.player >= 1) { nukeTargeting = true; toast('点击地图选择核弹落点'); }
-        return;
-      }
       // 小地图点击跳转
       if (sx >= VW - 172 && sy >= VH - 112) {
         var mw = 160, mh = 100, mx = VW - mw - 12, my = VH - mh - 12;
@@ -923,9 +1091,17 @@
         cam.x = Math.max(0, Math.min(MAP_W - VW, cam.x)); cam.y = Math.max(0, Math.min(MAP_H - VH, cam.y));
         return;
       }
-      // 右键 = 指令
+      // 右键 = 指令 或 设集结点
       if (e.button === 2) {
         var w2 = screenToWorld(sx, sy);
+        // 若选中了己方兵营/车厂,右键点地 = 设集结点
+        if (selected.length === 1 && selected[0] && selected[0].team === 'player' &&
+            (selected[0].kind === 'barracks' || selected[0].kind === 'warfactory')) {
+          var rb = selected[0];
+          rb.rally = { x: w2.x, y: w2.y };
+          toast('🚩 ' + BUILDINGS[rb.kind].name + ' 集结点已设置');
+          return;
+        }
         commandUnits(w2.x, w2.y, !!pickEntity(w2.x, w2.y, 'enemy'));
         return;
       }
@@ -944,10 +1120,34 @@
       var sx = mouse.x, sy = mouse.y;
       var x0 = Math.min(dragStart.x, sx) + cam.x, y0 = Math.min(dragStart.y, sy) + cam.y;
       var x1 = Math.max(dragStart.x, sx) + cam.x, y1 = Math.max(dragStart.y, sy) + cam.y;
-      // 框选范围太小 = 单击选一个
+      // 框选范围太小 = 单击选一个(含双击/三连击多选同兵种)
       if (x1 - x0 < 6 && y1 - y0 < 6) {
         var ent = pickEntity(x0, y0, 'player');
-        selected = ent ? [ent] : [];
+        if (ent && ent.def) {
+          // 点到单位:检测双击/三连击
+          var now = Date.now();
+          var sameKind = lastClick.kind === ent.kind;
+          var inTime = now - lastClick.t < 350;
+          if (sameKind && inTime) lastClick.count++; else lastClick.count = 1;
+          lastClick.t = now; lastClick.kind = ent.kind;
+          if (lastClick.count === 2) {
+            // 双击:选屏幕内视野中所有同兵种己方战斗单位
+            selected = units.filter(function (u) {
+              return u.team === 'player' && u.kind === ent.kind && u.def.role === 'atk' &&
+                     u.x >= cam.x && u.x <= cam.x + VW && u.y >= cam.y && u.y <= cam.y + VH;
+            });
+          } else if (lastClick.count >= 3) {
+            // 三连击:选全地图所有同兵种己方战斗单位
+            selected = units.filter(function (u) {
+              return u.team === 'player' && u.kind === ent.kind && u.def.role === 'atk';
+            });
+          } else {
+            selected = [ent];
+          }
+        } else {
+          selected = ent ? [ent] : [];
+          lastClick.count = 0;  // 点空地/建筑重置计数
+        }
       } else {
         selected = units.filter(function (u) {
           return u.team === 'player' && u.def.role === 'atk' && u.x >= x0 && u.x <= x1 && u.y >= y0 && u.y <= y1;
@@ -967,6 +1167,8 @@
       if (e.type === 'keydown') {
         if (k === 'escape') { buildMode = null; nukeTargeting = false; selected = []; }
         if (k === ' ' && hasBuilding('player', 'nuke') && NUKE_ENABLED && nukeCharge.player >= 1) { nukeTargeting = !nukeTargeting; }
+        // Delete/Backspace 卖出选中建筑
+        if ((k === 'delete' || k === 'backspace') && selected.length === 1) { sellBuilding(); e.preventDefault(); }
       }
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].indexOf(k) >= 0) e.preventDefault();
     }
