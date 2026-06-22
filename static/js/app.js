@@ -78,7 +78,9 @@
      */
     async mount(opts) {
       var slug = opts.slug, canvas = opts.canvas, hooks = opts.hooks || {};
-      await loadScript('/static/games/' + slug + '/game.js');
+      // 加时间戳查询串:每次进游戏都视为新 URL,绕过 CF/浏览器缓存,
+      // 确保玩家拿到最新版游戏脚本(开发迭代时尤其重要)
+      await loadScript('/static/games/' + slug + '/game.js?v=' + Date.now());
       if (!window.IanGame || typeof window.IanGame.init !== 'function') {
         throw new Error('游戏未实现 window.IanGame.init 接口');
       }

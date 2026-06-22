@@ -527,43 +527,167 @@
     function drawBuilding(b) {
       var def = BUILDINGS[b.kind]; var col = TEAM_COLOR[b.team];
       // 视口裁剪
-      if (b.x < cam.x - 60 || b.x > cam.x + VW + 60 || b.y < cam.y - 60 || b.y > cam.y + VH + 60) return;
+      if (b.x < cam.x - 70 || b.x > cam.x + VW + 70 || b.y < cam.y - 70 || b.y > cam.y + VH + 70) return;
       ctx.save(); ctx.translate(b.x, b.y);
-      if (b.building) ctx.globalAlpha = 0.5;
-      // 底座
-      ctx.fillStyle = col; ctx.shadowBlur = 10; ctx.shadowColor = col;
-      roundRect(-32, -32, 64, 64, 8); ctx.fill();
+      if (b.building) ctx.globalAlpha = 0.55;
+      // —— 3D 伪等距底座:顶面 + 右侧面 + 左侧面(暗→亮层次)——
+      var S = 34, H3D = 16; // 底座半径与高度
+      // 地面投影阴影
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath(); ctx.ellipse(2, S + 4, S, S * 0.35, 0, 0, 7); ctx.fill();
+      // 左侧面(最暗)
+      ctx.fillStyle = shade(col, -0.45);
+      poly3D(S, H3D, 'left'); ctx.fill();
+      // 右侧面(中暗)
+      ctx.fillStyle = shade(col, -0.28);
+      poly3D(S, H3D, 'right'); ctx.fill();
+      // 顶面(亮) + 阵营色辉光
+      ctx.shadowBlur = 12; ctx.shadowColor = col;
+      ctx.fillStyle = shade(col, 0.15);
+      poly3D(S, H3D, 'top'); ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(0,0,0,0.35)'; roundRect(-32, -32, 64, 22, 8); ctx.fill();
-      // 图标
-      ctx.font = '30px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(def.icon, 0, 4);
+      // 顶面内描边(科技感)
+      ctx.strokeStyle = shade(col, 0.5); ctx.lineWidth = 1.5;
+      poly3D(S * 0.82, H3D * 0.9, 'top'); ctx.stroke(); ctx.lineWidth = 1;
+      // —— 建筑差异化造型(顶面上的结构) ——
+      drawBuildingTop(b.kind, col, H3D);
       ctx.restore();
       // 血条
-      if (b.hp < b.maxhp) drawBar(b.x, b.y - 42, b.hp / b.maxhp, 50);
-      // 选中标记(己方建筑被选)
+      if (b.hp < b.maxhp) drawBar(b.x, b.y - 46, b.hp / b.maxhp, 56);
+      // —— 建筑名标签(半透明底条 + 白字)——
+      if (!b.building) drawLabel(def.name, b.x, b.y + S + 12, col);
       // 建造进度
-      if (b.building) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(b.x - 32, b.y + 22, 64, 6); ctx.fillStyle = '#3da9fc'; ctx.fillRect(b.x - 32, b.y + 22, 64 * (1 - b.t / def.build), 6); }
+      if (b.building) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(b.x - 32, b.y + S + 2, 64, 6);
+        ctx.fillStyle = '#3da9fc'; ctx.fillRect(b.x - 32, b.y + S + 2, 64 * (1 - b.t / def.build), 6);
+      }
+    }
+    // 3D 伪等距多边形:返回一个菱形台的三组面路径(top/left/right)
+    function poly3D(S, H, face) {
+      ctx.beginPath();
+      if (face === 'top') {
+        ctx.moveTo(0, -S + H); ctx.lineTo(S, 0 + H); ctx.lineTo(0, S + H); ctx.lineTo(-S, 0 + H);
+      } else if (face === 'left') {
+        ctx.moveTo(-S, 0 + H); ctx.lineTo(0, S + H); ctx.lineTo(0, S + H + 0); ctx.lineTo(-S, 0 + H + 0);
+        ctx.moveTo(-S, 0); ctx.lineTo(0, S); ctx.lineTo(0, S + H); ctx.lineTo(-S, 0 + H);
+      } else { // right
+        ctx.moveTo(S, 0); ctx.lineTo(0, S); ctx.lineTo(0, S + H); ctx.lineTo(S, 0 + H);
+      }
+      ctx.closePath();
+    }
+    // 颜色明暗调节:t>0 变亮,t<0 变暗
+    function shade(hex, t) {
+      var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      if (t >= 0) { r += (255 - r) * t; g += (255 - g) * t; b += (255 - b) * t; }
+      else { r *= (1 + t); g *= (1 + t); b *= (1 + t); }
+      return 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ')';
+    }
+    // 每种建筑在顶面上画独特结构(让玩家一眼区分)
+    function drawBuildingTop(kind, col, H) {
+      var accent = shade(col, 0.6);
+      ctx.fillStyle = accent; ctx.strokeStyle = accent; ctx.lineWidth = 2;
+      if (kind === 'base') {
+        // 中心圆顶 + 四角塔楼
+        ctx.fillStyle = shade(col, 0.4);
+        ctx.beginPath(); ctx.arc(0, H, 9, 0, 7); ctx.fill();
+        ctx.fillStyle = accent;
+        [[-14,-6],[14,-6],[-14,12],[14,12]].forEach(function(p){ ctx.beginPath(); ctx.arc(p[0],p[1]+H,3,0,7); ctx.fill(); });
+      } else if (kind === 'power') {
+        // 三根冷却塔(小圆柱)
+        ctx.fillStyle = shade(col, 0.3);
+        [-12,0,12].forEach(function(dx){ ctx.fillRect(dx-3, H-14, 6, 14); ctx.beginPath(); ctx.arc(dx, H-14, 4, 0, 7); ctx.fill(); });
+      } else if (kind === 'refinery') {
+        // 大烟囱 + 矿石仓
+        ctx.fillStyle = shade(col, 0.35); ctx.fillRect(8, H-18, 10, 18);
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(13, H-18, 6, 0, 7); ctx.fill();
+        ctx.fillStyle = MINE_COLOR; ctx.fillRect(-16, H-6, 20, 6);
+      } else if (kind === 'barracks') {
+        // 五角星徽标(兵营)
+        ctx.fillStyle = accent; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('★', 0, H - 2);
+      } else if (kind === 'warfactory') {
+        // 履带/齿轮标志
+        ctx.fillStyle = shade(col, 0.3); ctx.beginPath(); ctx.arc(0, H, 11, 0, 7); ctx.fill();
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, H, 5, 0, 7); ctx.fill();
+      } else if (kind === 'radar') {
+        // 雷达圆顶 + 旋转扫描线
+        ctx.fillStyle = shade(col, 0.35); ctx.beginPath(); ctx.arc(0, H, 13, Math.PI, 7); ctx.fill();
+        ctx.strokeStyle = accent; ctx.lineWidth = 2;
+        var ang = frame * 0.08;
+        ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(Math.cos(ang)*13, H + Math.sin(ang)*13); ctx.stroke();
+        ctx.lineWidth = 1;
+      } else if (kind === 'turret') {
+        // 炮塔基座 + 旋转炮管(指向最近敌人)
+        ctx.fillStyle = shade(col, 0.25); ctx.beginPath(); ctx.arc(0, H, 12, 0, 7); ctx.fill();
+        ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(0, H, 6, 0, 7); ctx.fill();
+      } else if (kind === 'nuke') {
+        // 核弹发射井:同心圆 + 脉动警告灯
+        var pulse = 0.5 + 0.5 * Math.sin(frame * 0.12);
+        ctx.strokeStyle = accent; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, H, 13, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, H, 8, 0, 7); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,77,77,' + pulse + ')';
+        ctx.beginPath(); ctx.arc(0, H, 4, 0, 7); ctx.fill();
+        ctx.lineWidth = 1;
+      }
+    }
+    // 名字标签:半透明底条 + 白字
+    function drawLabel(text, x, y, col) {
+      ctx.font = 'bold 11px Rajdhani, sans-serif';
+      var w = ctx.measureText(text).width + 10;
+      ctx.fillStyle = 'rgba(6,9,18,0.78)';
+      roundRect(x - w / 2, y, w, 15, 4); ctx.fill();
+      ctx.strokeStyle = col + '88'; roundRect(x - w / 2, y, w, 15, 4); ctx.stroke();
+      ctx.fillStyle = '#eaf0fb'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, x, y + 8);
     }
     function drawUnit(u) {
       if (u.x < cam.x - 30 || u.x > cam.x + VW + 30 || u.y < cam.y - 30 || u.y > cam.y + VH + 30) return;
       var col = TEAM_COLOR[u.team]; var isSel = selected.indexOf(u) >= 0;
       ctx.save(); ctx.translate(u.x, u.y);
-      // 阴影
-      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 8, 14, 5, 0, 0, 7); ctx.fill();
-      // 选中圈
-      if (isSel) { ctx.strokeStyle = '#3da9fc'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 18, 0, 7); ctx.stroke(); ctx.lineWidth = 1; }
+      // 地面阴影
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 10, 13, 4.5, 0, 0, 7); ctx.fill();
+      // 选中圈(地面光环)
+      if (isSel) {
+        ctx.strokeStyle = '#3da9fc'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 10, 16, 6, 0, 0, 7); ctx.stroke();
+        ctx.fillStyle = 'rgba(61,169,252,0.12)'; ctx.beginPath(); ctx.ellipse(0, 10, 16, 6, 0, 0, 7); ctx.fill();
+        ctx.lineWidth = 1;
+      }
       ctx.shadowBlur = 6; ctx.shadowColor = col;
-      ctx.fillStyle = col;
-      if (u.def.role === 'mine') { roundRect(-12, -10, 24, 20, 4); ctx.fill(); }
-      else if (u.kind === 'tank') { ctx.beginPath(); ctx.arc(0, 0, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#222'; ctx.fillRect(-3, -16, 6, 12); }
-      else if (u.kind === 'artillery') { ctx.fillRect(-10, -8, 20, 16); ctx.fillStyle = '#222'; ctx.fillRect(8, -3, 14, 6); }
-      else { ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill(); }
+      var topCol = shade(col, 0.25), sideCol = shade(col, -0.3);
+      if (u.def.role === 'mine') {
+        // 矿车:3D 货箱
+        ctx.fillStyle = sideCol; roundRect(-11, -4, 22, 14, 3); ctx.fill();
+        ctx.fillStyle = topCol; roundRect(-11, -10, 22, 8, 3); ctx.fill();
+        // 轮子
+        ctx.shadowBlur = 0; ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath(); ctx.arc(-7, 8, 3, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(7, 8, 3, 0, 7); ctx.fill();
+        if (u.cargo > 0) { ctx.fillStyle = MINE_COLOR; ctx.fillRect(-7, -8, 14, 5); }
+      } else if (u.kind === 'tank') {
+        // 坦克:履带底 + 炮塔 + 炮管(3D)
+        ctx.fillStyle = sideCol; roundRect(-13, -2, 26, 12, 3); ctx.fill(); // 履带
+        ctx.fillStyle = '#2a2a2a'; ctx.fillRect(-14, 6, 28, 3); ctx.fillRect(-14, -3, 28, 2);
+        ctx.fillStyle = topCol; ctx.beginPath(); ctx.arc(0, -3, 8, 0, 7); ctx.fill(); // 炮塔
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-2, -16, 4, 13); // 炮管
+      } else if (u.kind === 'artillery') {
+        // 火箭车:车体 + 多管发射器
+        ctx.fillStyle = sideCol; roundRect(-11, -3, 22, 12, 3); ctx.fill();
+        ctx.fillStyle = topCol; roundRect(-11, -9, 22, 7, 3); ctx.fill();
+        ctx.shadowBlur = 0; ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(6, -8, 16, 3); // 长炮管
+        ctx.fillRect(-3, -8, 3, 6); ctx.fillRect(2, -8, 3, 6); // 多管
+      } else {
+        // 步兵:圆头身(3D 小人)
+        ctx.fillStyle = topCol; ctx.beginPath(); ctx.arc(0, -4, 5, 0, 7); ctx.fill(); // 头
+        ctx.fillStyle = sideCol; roundRect(-5, -1, 10, 9, 2); ctx.fill(); // 身
+        ctx.fillStyle = shade(col, 0.5); ctx.fillRect(-1, -6, 2, 3); // 枪
+      }
       ctx.shadowBlur = 0;
-      // 矿车载货
-      if (u.cargo > 0) { ctx.fillStyle = MINE_COLOR; ctx.fillRect(-6, -4, 12, 4); }
       ctx.restore();
-      if (u.hp < u.maxhp) drawBar(u.x, u.y - 16, u.hp / u.maxhp, 24);
+      if (u.hp < u.maxhp) drawBar(u.x, u.y - 18, u.hp / u.maxhp, 26);
+      // 选中单位显示名字
+      if (isSel) drawLabel(u.def.name, u.x, u.y + 16, col);
     }
     function drawBar(x, y, pct, w) {
       ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(x - w / 2, y, w, 4);
