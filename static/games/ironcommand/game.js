@@ -25,7 +25,7 @@
   // ---------- 单位定义 ----------
   // kind, name, cost, hp, speed(像素/秒), sight, builtFrom, role, dmg?, range?, cool?
   var UNITS = {
-    harvester: { name: '矿车',   icon: '🚛', cost: 300, hp: 300, speed: 70, sight: 90,  from: 'refinery', role:'mine',  cap: 2 },
+    harvester: { name: '矿车',   icon: '🚛', cost: 300, hp: 300, speed: 70, sight: 90,  from: 'warfactory', role:'mine',  cap: 2 },
     soldier:   { name: '步兵',   icon: '🪖', cost: 100, hp: 80,  speed: 55, sight: 120, from: 'barracks', role:'atk',  dmg:8,  range:70, cool:0.7, target:'ground' },
     missile:   { name: '导弹兵', icon: '🚀', cost: 175, hp: 70,  speed: 50, sight: 130, from: 'barracks', role:'atk',  dmg:22, range:110, cool:1.2, target:'armor' },
     tank:      { name: '主战坦克',icon: '🛡️', cost: 500, hp: 280, speed: 60, sight: 150, from: 'warfactory', role:'atk', dmg:30, range:90, cool:1.0, target:'any' },
@@ -151,7 +151,15 @@
       }
       // 建筑建造中倒计时
       buildings.forEach(function (b) {
-        if (b.building) { b.t -= dt; if (b.t <= 0) { b.building = false; recomputePower(b.team); } }
+        if (b.building) { b.t -= dt; if (b.t <= 0) {
+          b.building = false; recomputePower(b.team);
+          // 精炼厂建好附赠一辆矿车(初始经济启动)
+          if (b.kind === 'refinery') {
+            var cnt = units.filter(function (u) { return u.team === b.team && u.kind === 'harvester'; }).length;
+            var refs = buildings.filter(function (bb) { return bb.team === b.team && bb.kind === 'refinery' && !bb.building; }).length;
+            if (cnt < refs * 2) addUnit('harvester', b.team, b.x + 40, b.y + 30);
+          }
+        } }
         // 炮塔开火
         if (b.kind === 'turret' && !b.building) {
           var def = BUILDINGS.turret.atk;
@@ -352,7 +360,11 @@
       if (oreE >= 350 && !hasBuilding('enemy', 'turret') && hasBuilding('enemy', 'barracks')) tryBuild('enemy', 'turret');
       // 造兵(兵力上限低)
       if (countUnits('enemy') < 12) {
-        if (hasBuilding('enemy', 'warfactory') && oreE >= 500) tryProduce('enemy', 'tank');
+        // 优先补矿车保经济(矿车从战车工厂生产,数量受精炼厂上限)
+        var ehvs = units.filter(function (u) { return u.team === 'enemy' && u.kind === 'harvester'; }).length;
+        var erefs = buildings.filter(function (b) { return b.team === 'enemy' && b.kind === 'refinery' && !b.building; }).length;
+        if (ehvs < erefs * 2 && hasBuilding('enemy', 'warfactory') && oreE >= 300) tryProduce('enemy', 'harvester');
+        else if (hasBuilding('enemy', 'warfactory') && oreE >= 500) tryProduce('enemy', 'tank');
         else if (hasBuilding('enemy', 'barracks') && oreE >= 100) tryProduce('enemy', 'soldier');
       }
       // 进攻波次:每 ~50s 集结所有战斗单位冲玩家基地
@@ -772,7 +784,7 @@
       items.push({ divider: '🏗 建筑' });
       bkeys.forEach(function (k) { items.push({ type: 'building', kind: k }); });
       items.push({ divider: '⚔ 单位' });
-      ['soldier', 'missile', 'tank', 'artillery'].forEach(function (k) { items.push({ type: 'unit', kind: k }); });
+      ['soldier', 'missile', 'harvester', 'tank', 'artillery'].forEach(function (k) { items.push({ type: 'unit', kind: k }); });
 
       // 计算内容总高,裁剪 + 滚动
       var contentTop = y0 + 32;
