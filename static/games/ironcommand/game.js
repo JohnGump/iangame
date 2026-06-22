@@ -58,6 +58,7 @@
 
     function reset() {
       cam = { x: 0, y: 0 };
+      panelScroll = 0;
       keys = {};
       oreP = 1500; oreE = 1000; powerP = 0; powerE = 0;
       buildings = []; units = []; bullets = []; particles = []; floatTexts = [];
@@ -446,12 +447,28 @@
       var sp = 480 * dt;
       var m = mouse;
       var pad = 24;
-      if (keys['w'] || keys['arrowup'] || (m && m.y < pad)) cam.y -= sp;
-      if (keys['s'] || keys['arrowdown'] || (m && m.y > VH - pad)) cam.y += sp;
-      if (keys['a'] || keys['arrowleft'] || (m && m.x < pad)) cam.x -= sp;
-      if (keys['d'] || keys['arrowright'] || (m && m.x > VW - pad)) cam.x += sp;
+      // 键盘卷动始终生效
+      if (keys['w'] || keys['arrowup']) cam.y -= sp;
+      if (keys['s'] || keys['arrowdown']) cam.y += sp;
+      if (keys['a'] || keys['arrowleft']) cam.x -= sp;
+      if (keys['d'] || keys['arrowright']) cam.x += sp;
+      // 鼠标贴边卷动:仅在鼠标不在面板/小地图区域时生效(避免操作面板时误卷屏)
+      if (m && !inUIArea(m.x, m.y)) {
+        if (m.y < pad) cam.y -= sp;
+        if (m.y > VH - pad) cam.y += sp;
+        if (m.x < pad) cam.x -= sp;
+        if (m.x > VW - pad) cam.x += sp;
+      }
       cam.x = Math.max(0, Math.min(MAP_W - VW, cam.x));
       cam.y = Math.max(0, Math.min(MAP_H - VH, cam.y));
+    }
+    // 判断屏幕坐标是否落在 UI 面板/小地图上(这些区域不卷屏、不框选)
+    function inUIArea(sx, sy) {
+      if (sx >= PANEL_X && sx <= PANEL_X + PANEL_W && sy >= 60 && sy <= VH - 16) return true; // 左侧建造面板
+      if (sx >= VW - 172 && sy >= VH - 112) return true;                                        // 右下小地图
+      if (sx >= VW - 152 && sy >= VH - 96 && sy <= VH - 56) return true;                        // 核弹按钮
+      if (sy <= 52) return true;                                                                 // 顶栏
+      return false;
     }
     function screenToWorld(sx, sy) { return { x: sx + cam.x, y: sy + cam.y }; }
 
@@ -734,44 +751,97 @@
       var b = buildings.filter(function (x) { return x.team === team && x.kind === 'base'; })[0];
       return b ? b.hp : 0;
     }
-    var PANEL_X, PANEL_W, PANEL_ITEMS;
+    var PANEL_X, PANEL_W, PANEL_ITEMS, panelScroll, panelScrollMax;
+    var PANEL_ITEM_H = 40;   // 每项高度(加大,容纳更大图标)
     function drawBuildPanel() {
-      // 建造面板:右下,分两列(建筑/单位)
-      PANEL_X = VW - 152; PANEL_W = 144;
-      var y0 = 64;
-      ctx.fillStyle = 'rgba(6,9,18,0.8)'; roundRectH(PANEL_X, y0, PANEL_W, VH - 64 - 110, 10); ctx.fill();
-      ctx.strokeStyle = 'rgba(124,58,237,0.3)'; roundRectH(PANEL_X, y0, PANEL_W, VH - 64 - 110, 10); ctx.stroke();
-      ctx.fillStyle = '#eaf0fb'; ctx.textAlign = 'center'; ctx.font = 'bold 12px Rajdhani';
-      ctx.fillText('🏗 建造', PANEL_X + PANEL_W / 2, y0 + 14);
-      var by = y0 + 24;
+      // 建造面板:【移到左侧】,避开右下小地图;固定宽度,可滚动
+      PANEL_X = 8; PANEL_W = 156;
+      var y0 = 60, panelH = VH - y0 - 16;
+      // 面板背景
+      ctx.fillStyle = 'rgba(6,9,18,0.92)'; roundRectH(PANEL_X, y0, PANEL_W, panelH, 10); ctx.fill();
+      ctx.strokeStyle = 'rgba(124,58,237,0.4)'; ctx.lineWidth = 1.5; roundRectH(PANEL_X, y0, PANEL_W, panelH, 10); ctx.stroke(); ctx.lineWidth = 1;
+      // 标题栏
+      ctx.fillStyle = 'rgba(124,58,237,0.25)'; roundRectH(PANEL_X, y0, PANEL_W, 26, 10); ctx.fill();
+      ctx.fillStyle = '#eaf0fb'; ctx.textAlign = 'center'; ctx.font = 'bold 13px Rajdhani'; ctx.textBaseline = 'middle';
+      ctx.fillText('🏗 建造 / ⚔ 单位', PANEL_X + PANEL_W / 2, y0 + 13);
+      ctx.textBaseline = 'alphabetic';
+
+      // 收集所有面板项(建筑组 + 单位组,带分组标题)
+      var items = [];
       var bkeys = ['power', 'refinery', 'barracks', 'warfactory', 'radar', 'turret'].concat(NUKE_ENABLED ? ['nuke'] : []);
+      items.push({ divider: '🏗 建筑' });
+      bkeys.forEach(function (k) { items.push({ type: 'building', kind: k }); });
+      items.push({ divider: '⚔ 单位' });
+      ['soldier', 'missile', 'tank', 'artillery'].forEach(function (k) { items.push({ type: 'unit', kind: k }); });
+
+      // 计算内容总高,裁剪 + 滚动
+      var contentTop = y0 + 32;
+      var viewportBottom = y0 + panelH - 6;
+      var contentH = items.length * PANEL_ITEM_H;
+      panelScrollMax = Math.max(0, contentH - (viewportBottom - contentTop));
+      if (panelScroll > panelScrollMax) panelScroll = panelScrollMax;
+      if (panelScroll < 0) panelScroll = 0;
+
       PANEL_ITEMS = [];
-      bkeys.forEach(function (k, i) {
-        drawPanelItem(k, 'building', PANEL_X + 8, by + i * 34, canBuild('player', k), oreP >= BUILDINGS[k].cost);
-        PANEL_ITEMS.push({ type: 'building', kind: k, x: PANEL_X + 8, y: by + i * 34 });
+      // 裁剪到面板内(滚动区域)
+      ctx.save();
+      ctx.beginPath(); ctx.rect(PANEL_X, contentTop - 4, PANEL_W, viewportBottom - contentTop + 4); ctx.clip();
+      items.forEach(function (it, i) {
+        var iy = contentTop + i * PANEL_ITEM_H - panelScroll;
+        if (iy + PANEL_ITEM_H < contentTop || iy > viewportBottom) return; // 视口外跳过
+        if (it.divider) {
+          ctx.fillStyle = '#8b97b3'; ctx.font = 'bold 11px Rajdhani'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(it.divider, PANEL_X + 10, iy + 12);
+          ctx.textBaseline = 'alphabetic';
+        } else {
+          var def = it.type === 'building' ? BUILDINGS[it.kind] : UNITS[it.kind];
+          var avail = it.type === 'building' ? canBuild('player', it.kind) : canProduce('player', it.kind);
+          var afford = oreP >= def.cost;
+          drawPanelItem(def, it.type, PANEL_X + 6, iy, PANEL_W - 12, PANEL_ITEM_H - 4, avail, afford);
+          PANEL_ITEMS.push({ type: it.type, kind: it.kind, x: PANEL_X + 6, y: iy, w: PANEL_W - 12, h: PANEL_ITEM_H - 4 });
+        }
       });
-      // 单位
-      var uy = by + bkeys.length * 34 + 8;
-      ctx.fillStyle = '#eaf0fb'; ctx.fillText('⚔ 单位', PANEL_X + PANEL_W / 2, uy + 6); uy += 16;
-      var ukeys = ['soldier', 'missile', 'tank', 'artillery'];
-      ukeys.forEach(function (k, i) {
-        drawPanelItem(k, 'unit', PANEL_X + 8, uy + i * 34, canProduce('player', k), oreP >= UNITS[k].cost);
-        PANEL_ITEMS.push({ type: 'unit', kind: k, x: PANEL_X + 8, y: uy + i * 34 });
-      });
+      ctx.restore();
+      // 滚动条
+      if (panelScrollMax > 0) {
+        var barH = (viewportBottom - contentTop) * (viewportBottom - contentTop) / contentH;
+        var barY = contentTop + panelScroll * (viewportBottom - contentTop - barH) / panelScrollMax;
+        ctx.fillStyle = 'rgba(124,58,237,0.5)'; ctx.fillRect(PANEL_X + PANEL_W - 4, barY, 3, barH);
+      }
+      // 滚动提示
+      if (panelScrollMax > 0) {
+        ctx.fillStyle = '#5a6580'; ctx.font = '10px Rajdhani'; ctx.textAlign = 'center';
+        ctx.fillText('📜 滚轮滚动', PANEL_X + PANEL_W / 2, y0 + panelH - 4);
+      }
     }
-    function drawPanelItem(kind, type, x, y, avail, afford) {
-      var def = type === 'building' ? BUILDINGS[kind] : UNITS[kind];
-      var w = PANEL_W - 16, h = 30;
-      ctx.fillStyle = avail ? 'rgba(61,169,252,0.08)' : 'rgba(255,255,255,0.03)';
-      roundRectH(x, y, w, h, 6); ctx.fill();
-      ctx.strokeStyle = avail ? (afford ? '#3da9fc' : 'rgba(255,179,39,0.4)') : 'rgba(255,255,255,0.08)';
-      roundRectH(x, y, w, h, 6); ctx.stroke();
-      ctx.globalAlpha = avail ? 1 : 0.4;
-      ctx.font = '18px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(def.icon, x + 8, y + 15);
-      ctx.fillStyle = '#eaf0fb'; ctx.font = 'bold 12px Rajdhani'; ctx.fillText(def.name, x + 34, y + 11);
-      ctx.fillStyle = afford ? MINE_COLOR : '#ff4d4d'; ctx.font = '11px Rajdhani'; ctx.fillText('💰' + def.cost, x + 34, y + 22);
-      ctx.globalAlpha = 1;
+    function drawPanelItem(def, type, x, y, w, h, avail, afford) {
+      // 卡片底:可用=蓝调,不可用=灰红禁用
+      ctx.fillStyle = avail ? 'rgba(61,169,252,0.15)' : 'rgba(90,40,40,0.4)';
+      roundRectH(x, y, w, h, 8); ctx.fill();
+      ctx.strokeStyle = avail ? (afford ? '#3da9fc' : '#ffb627') : 'rgba(255,77,77,0.5)';
+      ctx.lineWidth = avail ? 1.5 : 1; roundRectH(x, y, w, h, 8); ctx.stroke(); ctx.lineWidth = 1;
+
+      // 左侧彩色图标方块(建筑=蓝/单位=橙),让 icon 醒目
+      var iconBg = type === 'building' ? shade('#3da9fc', -0.35) : shade('#ffb627', -0.3);
+      ctx.fillStyle = iconBg; roundRectH(x + 4, y + 4, h - 8, h - 8, 6); ctx.fill();
+      // 图标 emoji(大字号,居中)
+      ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(def.icon, x + 4 + (h - 8) / 2, y + h / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+
+      // 右侧:名字 + 价格
+      var tx = x + h + 2;
+      ctx.fillStyle = avail ? '#eaf0fb' : '#8b97b3'; ctx.font = 'bold 12px Rajdhani'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(def.name, tx, y + 13);
+      // 价格 / 状态
+      if (!avail) {
+        ctx.fillStyle = '#ff4d4d'; ctx.font = '10px Rajdhani'; ctx.fillText('🔒 前置未满足', tx, y + 28);
+      } else if (!afford) {
+        ctx.fillStyle = '#ff4d4d'; ctx.font = 'bold 11px Rajdhani'; ctx.fillText('💰 ' + def.cost + ' (不足)', tx, y + 28);
+      } else {
+        ctx.fillStyle = MINE_COLOR; ctx.font = 'bold 11px Rajdhani'; ctx.fillText('💰 ' + def.cost, tx, y + 28);
+      }
+      ctx.textBaseline = 'alphabetic';
     }
     function roundRectH(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
@@ -818,15 +888,16 @@
       mouse = { x: sx, y: sy };
       // 核弹目标选择
       if (nukeTargeting) { var w = screenToWorld(sx, sy); launchNuke(w.x, w.y); return; }
-      // 点击建造面板
-      if (PANEL_ITEMS && sx >= PANEL_X) {
+      // 点击建造面板(左侧)
+      if (PANEL_ITEMS && sx >= PANEL_X && sx <= PANEL_X + PANEL_W) {
         for (var i = 0; i < PANEL_ITEMS.length; i++) {
           var it = PANEL_ITEMS[i];
-          if (sx >= it.x && sx <= it.x + PANEL_W - 16 && sy >= it.y && sy <= it.y + 30) {
+          if (sx >= it.x && sx <= it.x + it.w && sy >= it.y && sy <= it.y + it.h) {
             if (it.type === 'building') cmdBuild(it.kind); else cmdProduce(it.kind);
             return;
           }
         }
+        return; // 点在面板空白区,不触发框选
       }
       // 核弹按钮
       if (hasBuilding('player', 'nuke') && NUKE_ENABLED && sx >= VW - 152 && sy >= VH - 96 && sy <= VH - 56) {
@@ -888,6 +959,17 @@
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].indexOf(k) >= 0) e.preventDefault();
     }
     function onContext(e) { e.preventDefault(); }
+    // 鼠标滚轮:在面板区域内滚动建造列表
+    function onWheel(e) {
+      var r = canvas.getBoundingClientRect();
+      var sx = (e.clientX - r.left) * (VW / r.width), sy = (e.clientY - r.top) * (VH / r.height);
+      // 鼠标在面板上才滚动(否则不拦截,让页面正常滚)
+      if (sx >= PANEL_X && sx <= PANEL_X + PANEL_W && sy >= 60 && sy <= VH - 16) {
+        panelScroll += (e.deltaY > 0 ? 1 : -1) * PANEL_ITEM_H;
+        panelScroll = Math.max(0, Math.min(panelScrollMax || 0, panelScroll));
+        e.preventDefault();
+      }
+    }
     function onTouch(e, type) {
       var t = e.touches[0] || e.changedTouches[0];
       var r = canvas.getBoundingClientRect();
@@ -920,6 +1002,7 @@
       canvas.removeEventListener('mousemove', onMove);
       canvas.removeEventListener('mouseup', onUp);
       canvas.removeEventListener('contextmenu', onContext);
+      canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
     }
@@ -929,6 +1012,7 @@
     canvas.addEventListener('mousemove', onMove);
     canvas.addEventListener('mouseup', onUp);
     canvas.addEventListener('contextmenu', onContext);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKey);
     reset();
