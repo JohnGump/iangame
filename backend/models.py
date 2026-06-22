@@ -53,7 +53,7 @@ class LoginAttempt(db.Model):
     ts = db.Column(db.Float, nullable=False)  # 失败时间戳(epoch 秒)
 
 
-# 12 款游戏种子数据
+# 13 款游戏种子数据
 SEED_GAMES = [
     {"slug": "pvz", "name": "植物大战僵尸", "category": "defense", "icon": "🌻", "color": "#5fd35f",
      "desc": "布置植物军团,抵御一波波僵尸入侵草坪", "controls": "点击空地放置植物,收集阳光"},
@@ -79,6 +79,9 @@ SEED_GAMES = [
      "desc": "操控坦克摧毁敌方,保卫基地", "controls": "方向键移动 · 空格开炮"},
     {"slug": "memory", "name": "记忆翻牌", "category": "puzzle", "icon": "🃏", "color": "#ff2e63",
      "desc": "翻开卡牌找出相同图案,考验记忆", "controls": "点击翻牌配对"},
+    {"slug": "ironcommand", "name": "铁幕指挥官", "category": "strategy", "icon": "⚙️", "color": "#3da9fc",
+     "desc": "红警风即时战略:采矿、建造基地、生产军队,指挥作战摧毁敌方主基地(含战争迷雾、科技树、可选核弹)",
+     "controls": "左键框选单位·右键移动/攻击·WASD移视野·右侧面板建造生产"},
 ]
 
 CATEGORY_LABELS = {
@@ -87,4 +90,5 @@ CATEGORY_LABELS = {
     'shooter': '射击',
     'battle': '对战',
     'defense': '塔防',
+    'strategy': '策略',
 }
