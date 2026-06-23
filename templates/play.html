@@ -24,6 +24,11 @@
           <div>
             <div class="ttl">{{ game.icon }} {{ game.name }}</div>
             <div class="sub">{{ game.desc }}</div>
+            <div class="flex gap-8" style="justify-content:center;margin-bottom:18px">
+              <button class="btn btn-ghost btn-sm diff-btn" data-diff="easy">😊 简单</button>
+              <button class="btn btn-primary btn-sm diff-btn active" data-diff="normal">⚔️ 普通</button>
+              <button class="btn btn-ghost btn-sm diff-btn" data-diff="hard">🔥 困难</button>
+            </div>
             <button class="btn btn-primary" id="startBtn">▶ 开始游戏</button>
           </div>
         </div>
@@ -79,6 +84,7 @@
   var curEl = document.getElementById('curScore');
   var bestEl = document.getElementById('bestScore');
   var lbEl = document.getElementById('leaderboard');
+  var selectedDiff = 'normal';  // 当前选择的难度(重开沿用)
 
   var ctrl = null, started = false, paused = false;
   var score = 0, level = 0;
@@ -104,9 +110,18 @@
       startBtn.style.display = 'none';
     });
 
-  // 3. 开始
-  startBtn.addEventListener('click', function () { beginGame(); });
-  restartBtn.addEventListener('click', function () { beginGame(); });
+  // 3. 难度选择 + 开始
+  document.querySelectorAll('.diff-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.diff-btn').forEach(function (b) {
+        b.classList.remove('btn-primary', 'active'); b.classList.add('btn-ghost');
+      });
+      btn.classList.remove('btn-ghost'); btn.classList.add('btn-primary', 'active');
+      selectedDiff = btn.dataset.diff;
+    });
+  });
+  startBtn.addEventListener('click', function () { beginGame(selectedDiff); });
+  restartBtn.addEventListener('click', function () { beginGame(selectedDiff); });
   pauseBtn.addEventListener('click', function () {
     if (!ctrl || !started) return;
     paused = !paused;
@@ -133,12 +148,12 @@
     if (e.key === 'F11') { e.preventDefault(); fsBtn.click(); }
   });
 
-  function beginGame() {
+  function beginGame(diff) {
     overlay.classList.add('hidden');
     paused = false; pauseBtn.textContent = '⏸ 暂停';
     Promise.resolve(loaded).then(function () {
       if (!ctrl) return;
-      ctrl.restart();
+      ctrl.restart(diff || selectedDiff);
       started = true;
     });
   }

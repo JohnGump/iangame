@@ -40,6 +40,12 @@ var UNITS = {
 // 兵种克制倍率表:bonus[攻击者护甲偏好][目标护甲] = 伤害倍率(默认1.0)
 // 已在各单位 bonus 字段内联,这里集中保留默认倍率
 var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
+// 难度配置:oreP玩家初始矿/oreE敌方初始矿/waveTime进攻波次间隔秒/unitCap敌兵力上限/aiAggro AI积极性倍率
+var DIFFICULTY = {
+  easy:   { name: '简单', oreP: 2500, oreE: 600,  waveTime: 70, unitCap: 10, aiAggro: 0.5 },
+  normal: { name: '普通', oreP: 1500, oreE: 1000, waveTime: 50, unitCap: 14, aiAggro: 1.0 },
+  hard:   { name: '困难', oreP: 1000, oreE: 1600, waveTime: 35, unitCap: 20, aiAggro: 1.5 },
+};
 
   var TEAM_COLOR = { player: '#3da9fc', enemy: '#ff4d4d' };
   var MINE_COLOR = '#ffd54a';
@@ -68,18 +74,20 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
     // 输入
     var mouse, dragStart, isDragging;
     var lastClick = { t: 0, kind: null, count: 0 };  // 双击/三连击时序检测
+    var curDiff = 'normal';  // 当前难度
 
     function reset() {
       cam = { x: 0, y: 0 };
       panelScroll = 0;
       lastClick = { t: 0, kind: null, count: 0 };
       keys = {};
-      oreP = 1500; oreE = 1000; powerP = 0; powerE = 0;
+      var D = DIFFICULTY[curDiff] || DIFFICULTY.normal;
+      oreP = D.oreP; oreE = D.oreE; powerP = 0; powerE = 0;
       buildings = []; units = []; bullets = []; particles = []; floatTexts = [];
       nukeMissiles = []; shockwaves = []; camShake = 0;
       mines = []; selected = []; buildMode = null; prodQueue = [];
       nukeCharge = { player: 0, enemy: 0 }; nukeTargeting = false;
-      enemyAItimer = 40; enemyAIwave = 0; score = 0; kills = 0;
+      enemyAItimer = D.waveTime * 0.8; enemyAIwave = 0; score = 0; kills = 0;
       over = false; won = false; frame = 0; acc = 0; last = 0;
       initFog();
       // 生成矿脉(地图各处)
@@ -499,23 +507,25 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       // 高级建筑:雷达后造核电站(解电)和作战实验室(解锁高级兵)
       if (oreE >= 1200 && !hasBuilding('enemy', 'nuclearplant') && hasBuilding('enemy', 'radar')) tryBuild('enemy', 'nuclearplant');
       if (oreE >= 1000 && !hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'radar')) tryBuild('enemy', 'lab');
-      // 造兵(兵力上限低)
-      if (countUnits('enemy') < 14) {
+      // 造兵(兵力上限)
+      var dCap = (DIFFICULTY[curDiff] || DIFFICULTY.normal).unitCap;
+      var dAggro = (DIFFICULTY[curDiff] || DIFFICULTY.normal).aiAggro;
+      if (countUnits('enemy') < dCap) {
         // 优先补矿车保经济(矿车从战车工厂生产,数量受精炼厂上限)
         var ehvs = units.filter(function (u) { return u.team === 'enemy' && u.kind === 'harvester'; }).length;
         var erefs = buildings.filter(function (b) { return b.team === 'enemy' && b.kind === 'refinery' && !b.building; }).length;
         if (ehvs < erefs * 2 && hasBuilding('enemy', 'warfactory') && oreE >= 300) tryProduce('enemy', 'harvester');
         // 高级兵种(有作战实验室时优先造,提升威胁)
-        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'warfactory') && oreE >= 900 && Math.random() < 0.4) tryProduce('enemy', 'apocalypse');
-        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'warfactory') && oreE >= 800 && Math.random() < 0.3) tryProduce('enemy', 'prism');
-        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'barracks') && oreE >= 400 && Math.random() < 0.3) tryProduce('enemy', 'tesla');
+        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'warfactory') && oreE >= 900 && Math.random() < 0.4 * dAggro) tryProduce('enemy', 'apocalypse');
+        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'warfactory') && oreE >= 800 && Math.random() < 0.3 * dAggro) tryProduce('enemy', 'prism');
+        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'barracks') && oreE >= 400 && Math.random() < 0.3 * dAggro) tryProduce('enemy', 'tesla');
         else if (hasBuilding('enemy', 'warfactory') && oreE >= 500) tryProduce('enemy', 'tank');
         else if (hasBuilding('enemy', 'barracks') && oreE >= 100) tryProduce('enemy', 'soldier');
       }
       // 进攻波次:每 ~50s 集结所有战斗单位冲玩家基地
       if (enemyAItimer <= 0) {
         enemyAIwave++;
-        enemyAItimer = 50;
+        enemyAItimer = (DIFFICULTY[curDiff] || DIFFICULTY.normal).waveTime;
         var pbase = buildings.filter(function (b) { return b.team === 'player' && b.kind === 'base'; })[0];
         if (pbase) {
           units.filter(function (u) { return u.team === 'enemy' && u.def.role === 'atk'; }).forEach(function (u) {
@@ -621,6 +631,11 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
     function pickEntity(wx, wy, team) {
       for (var i = 0; i < units.length; i++) { var u = units[i]; if ((!team || u.team === team) && Math.hypot(u.x - wx, u.y - wy) < 20) return u; }
       for (var j = 0; j < buildings.length; j++) { var b = buildings[j]; if ((!team || b.team === team) && Math.hypot(b.x - wx, b.y - wy) < 45) return b; }
+      return null;
+    }
+    // 拾取矿脉(用于右键指派矿车)
+    function pickMine(wx, wy) {
+      for (var i = 0; i < mines.length; i++) { var m = mines[i]; if (Math.hypot(m.x - wx, m.y - wy) < m.r + 8) return m; }
       return null;
     }
     function launchNuke(wx, wy) {
@@ -1383,6 +1398,20 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
           toast('🚩 ' + BUILDINGS[rb.kind].name + ' 集结点已设置');
           return;
         }
+        // 选中含矿车且右键点中矿脉 → 指派矿车去该矿场
+        var hasMine = selected.some(function (s) { return s.def && s.def.role === 'mine'; });
+        if (hasMine) {
+          var mine = pickMine(w2.x, w2.y);
+          if (mine) {
+            selected.forEach(function (u) {
+              if (u.def && u.def.role === 'mine') {
+                u.mineTarget = mine; u.miningState = 'toMine'; u.cargo = 0;
+              }
+            });
+            toast('🚛 矿车已指派到该矿场');
+            return;
+          }
+        }
         commandUnits(w2.x, w2.y, !!pickEntity(w2.x, w2.y, 'enemy'));
         return;
       }
@@ -1412,15 +1441,15 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
           if (sameKind && inTime) lastClick.count++; else lastClick.count = 1;
           lastClick.t = now; lastClick.kind = ent.kind;
           if (lastClick.count === 2) {
-            // 双击:选屏幕内视野中所有同兵种己方战斗单位
+            // 双击:选屏幕内视野中所有同兵种己方单位(含矿车)
             selected = units.filter(function (u) {
-              return u.team === 'player' && u.kind === ent.kind && u.def.role === 'atk' &&
+              return u.team === 'player' && u.kind === ent.kind && u.def &&
                      u.x >= cam.x && u.x <= cam.x + VW && u.y >= cam.y && u.y <= cam.y + VH;
             });
           } else if (lastClick.count >= 3) {
-            // 三连击:选全地图所有同兵种己方战斗单位
+            // 三连击:选全地图所有同兵种己方单位(含矿车)
             selected = units.filter(function (u) {
-              return u.team === 'player' && u.kind === ent.kind && u.def.role === 'atk';
+              return u.team === 'player' && u.kind === ent.kind && u.def;
             });
           } else {
             selected = [ent];
@@ -1431,7 +1460,7 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
         }
       } else {
         selected = units.filter(function (u) {
-          return u.team === 'player' && u.def.role === 'atk' && u.x >= x0 && u.x <= x1 && u.y >= y0 && u.y <= y1;
+          return u.team === 'player' && u.def && u.x >= x0 && u.x <= x1 && u.y >= y0 && u.y <= y1;
         });
         // 若没选到战斗单位,尝试选己方建筑
         if (selected.length === 0) {
@@ -1488,7 +1517,7 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       draw();
       rafId = requestAnimationFrame(loop);
     }
-    function start() { reset(); running = true; paused = false; last = 0; acc = 0; }
+    function start(diff) { if (diff) curDiff = diff; reset(); running = true; paused = false; last = 0; acc = 0; }
     function pause() { paused = true; emitState('paused'); }
     function resume() { if (over) return; paused = false; emitState('playing'); }
     function destroy() {
@@ -1512,7 +1541,7 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
     window.addEventListener('keyup', onKey);
     reset();
     running = false; rafId = requestAnimationFrame(loop);
-    return { pause: pause, resume: resume, restart: start, destroy: destroy };
+    return { pause: pause, resume: resume, restart: function (diff) { start(diff); }, destroy: destroy };
   }
 
   window.IanGame = { init: init };
