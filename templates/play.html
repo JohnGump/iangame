@@ -19,7 +19,7 @@
   <div class="play-wrap">
     <div class="play-main">
       <div class="play-canvas-box" id="canvasBox">
-        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        <canvas id="gameCanvas" width="1100" height="660"></canvas>
         <div class="overlay" id="overlay">
           <div>
             <div class="ttl">{{ game.icon }} {{ game.name }}</div>
@@ -32,6 +32,7 @@
         <div class="flex gap-8">
           <button class="btn btn-ghost btn-sm" id="restartBtn">🔄 重开</button>
           <button class="btn btn-ghost btn-sm" id="pauseBtn">⏸ 暂停</button>
+          <button class="btn btn-ghost btn-sm" id="fsBtn">⛶ 全屏</button>
         </div>
         <div class="muted tiny">操作:{{ game.controls }}</div>
       </div>
@@ -69,10 +70,12 @@
   // 服务端签发的短期游戏令牌(登录用户),提交分数时必须回传,防直接调 API 刷分
   var GAME_TOKEN = {{ game_token|default('')|tojson }};
   var canvas = document.getElementById('gameCanvas');
+  var canvasBox = document.getElementById('canvasBox');
   var overlay = document.getElementById('overlay');
   var startBtn = document.getElementById('startBtn');
   var restartBtn = document.getElementById('restartBtn');
   var pauseBtn = document.getElementById('pauseBtn');
+  var fsBtn = document.getElementById('fsBtn');
   var curEl = document.getElementById('curScore');
   var bestEl = document.getElementById('bestScore');
   var lbEl = document.getElementById('leaderboard');
@@ -109,6 +112,25 @@
     paused = !paused;
     if (paused) { ctrl.pause(); pauseBtn.textContent = '▶ 继续'; }
     else { ctrl.resume(); pauseBtn.textContent = '⏸ 暂停'; }
+  });
+
+  // 全屏切换
+  fsBtn.addEventListener('click', function () {
+    if (!document.fullscreenElement) {
+      (canvasBox.requestFullscreen || canvasBox.webkitRequestFullscreen || function(){}).call(canvasBox);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+    }
+  });
+  document.addEventListener('fullscreenchange', function () {
+    fsBtn.textContent = document.fullscreenElement ? '🗗 退出全屏' : '⛶ 全屏';
+  });
+  document.addEventListener('webkitfullscreenchange', function () {
+    fsBtn.textContent = document.webkitFullscreenElement ? '🗗 退出全屏' : '⛶ 全屏';
+  });
+  // ESC 退出全屏由浏览器处理;游戏内 ESC 选区清除在全屏时也兼容
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'F11') { e.preventDefault(); fsBtn.click(); }
   });
 
   function beginGame() {

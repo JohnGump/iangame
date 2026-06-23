@@ -191,9 +191,16 @@ canvas { display: block; }
 .play-canvas-box {
   position: relative; border-radius: var(--radius); overflow: hidden;
   background: #000; border: 1px solid var(--border);
-  display: grid; place-items: center; min-height: 360px;
+  display: grid; place-items: center; min-height: 480px;
 }
 .play-canvas-box canvas { width: 100%; height: auto; background: #000; }
+/* 全屏模式:画布撑满屏幕 */
+.play-canvas-box:fullscreen, .play-canvas-box:-webkit-full-screen {
+  border-radius: 0; border: none; min-height: 100vh;
+}
+.play-canvas-box:fullscreen canvas, .play-canvas-box:-webkit-full-screen canvas {
+  width: 100vw; height: 100vh; object-fit: contain;
+}
 .play-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .play-meta { display: flex; align-items: center; gap: 18px; }
 .stat-pill { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; }

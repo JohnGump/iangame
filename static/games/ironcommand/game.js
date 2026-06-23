@@ -12,25 +12,34 @@
 
   // ---------- 建筑定义 ----------
   // kind, name, cost矿, power(正=供/负=耗), hp, buildTime秒, sight视野, prereq前置, prod可生产单位kind列表, role
-  var BUILDINGS = {
-    base:      { name: '建造厂', icon: '🏛️', cost: 0,   power: -10, hp: 2000, build: 0,  sight: 220, prereq: [],               prod: [], side:'core' },
-    power:     { name: '发电厂', icon: '⚡', cost: 200,  power: 80,  hp: 400,  build: 5,  sight: 80,  prereq: ['base'],         prod: [], side:'econ' },
-    refinery:  { name: '精炼厂', icon: '🏭', cost: 400,  power: -20, hp: 600,  build: 8,  sight: 110, prereq: ['base'],         prod: ['harvester'], side:'econ' },
-    barracks:  { name: '兵营',   icon: '🪖', cost: 300,  power: -20, hp: 500,  build: 7,  sight: 110, prereq: ['power'],        prod: ['soldier','missile'], side:'mil' },
-    warfactory:{ name: '战车工厂',icon: '🏗️', cost: 600, power: -30, hp: 700,  build: 10, sight: 110, prereq: ['power'],        prod: ['tank','artillery'], side:'mil' },
-    radar:     { name: '雷达站', icon: '📡', cost: 500,  power: -30, hp: 450,  build: 9,  sight: 260, prereq: ['barracks'],     prod: [], side:'util' },
-    turret:    { name: '炮塔',   icon: '🗼', cost: 350,  power: -25, hp: 500,  build: 6,  sight: 200, prereq: ['barracks'],     prod: [], side:'def', atk:{dmg:18,range:180,cool:0.8} },
-    nuke:      { name: '核弹井', icon: '☢️', cost: 1500, power: -60, hp: 900,  build: 18, sight: 140, prereq: ['radar'],        prod: [], side:'super' },
-  };
+var BUILDINGS = {
+  base:       { name: '建造厂',   icon: '🏛️', cost: 0,   power: -10, hp: 2000, build: 0,  sight: 220, prereq: [],               prod: [], side:'core' },
+  power:      { name: '发电厂',   icon: '⚡', cost: 200,  power: 80,  hp: 400,  build: 5,  sight: 80,  prereq: ['base'],         prod: [], side:'econ' },
+  refinery:   { name: '精炼厂',   icon: '🏭', cost: 400,  power: -20, hp: 600,  build: 8,  sight: 110, prereq: ['base'],         prod: ['harvester'], side:'econ' },
+  barracks:   { name: '兵营',     icon: '🪖', cost: 300,  power: -20, hp: 500,  build: 7,  sight: 110, prereq: ['power'],        prod: ['soldier','missile'], side:'mil' },
+  warfactory: { name: '战车工厂', icon: '🏗️', cost: 600,  power: -30, hp: 700,  build: 10, sight: 110, prereq: ['power'],        prod: ['tank','artillery'], side:'mil' },
+  radar:      { name: '雷达站',   icon: '📡', cost: 500,  power: -30, hp: 450,  build: 9,  sight: 260, prereq: ['barracks'],     prod: [], side:'util' },
+  turret:     { name: '炮塔',     icon: '🗼', cost: 350,  power: -25, hp: 500,  build: 6,  sight: 200, prereq: ['barracks'],     prod: [], side:'def', atk:{dmg:18,range:180,cool:0.8} },
+  nuclearplant:{name: '核电站',   icon: '⚛️', cost: 1200, power: 300, hp: 600,  build: 14, sight: 120, prereq: ['radar'],        prod: [], side:'econ' },
+  lab:        { name: '作战实验室',icon: '🧪', cost: 1000, power: -40, hp: 550,  build: 12, sight: 130, prereq: ['radar'],        prod: [], side:'util' },
+  nuke:       { name: '核弹井',   icon: '☢️', cost: 1500, power: -60, hp: 900,  build: 18, sight: 140, prereq: ['radar'],        prod: [], side:'super' },
+};
   // ---------- 单位定义 ----------
   // kind, name, cost, hp, speed(像素/秒), sight, builtFrom, role, dmg?, range?, cool?
-  var UNITS = {
-    harvester: { name: '矿车',   icon: '🚛', cost: 300, hp: 300, speed: 70, sight: 90,  from: 'warfactory', role:'mine',  cap: 2 },
-    soldier:   { name: '步兵',   icon: '🪖', cost: 100, hp: 80,  speed: 55, sight: 120, from: 'barracks', role:'atk',  dmg:8,  range:70, cool:0.7, target:'ground' },
-    missile:   { name: '导弹兵', icon: '🚀', cost: 175, hp: 70,  speed: 50, sight: 130, from: 'barracks', role:'atk',  dmg:22, range:110, cool:1.2, target:'armor' },
-    tank:      { name: '主战坦克',icon: '🛡️', cost: 500, hp: 280, speed: 60, sight: 150, from: 'warfactory', role:'atk', dmg:30, range:90, cool:1.0, target:'any' },
-    artillery: { name: '火箭车', icon: '💥', cost: 700, hp: 180, speed: 50, sight: 160, from: 'warfactory', role:'atk', dmg:45, range:220, cool:2.0, target:'building' },
-  };
+var UNITS = {
+  harvester: { name: '矿车',     icon: '🚛', cost: 300, hp: 300, speed: 70, sight: 90,  from: 'warfactory', role:'mine',  cap: 2, armor:'vehicle' },
+  soldier:   { name: '步兵',     icon: '🪖', cost: 100, hp: 80,  speed: 55, sight: 120, from: 'barracks', role:'atk',  dmg:8,  range:70, cool:0.7, target:'inf',     armor:'inf' },
+  missile:   { name: '导弹兵',   icon: '🚀', cost: 175, hp: 70,  speed: 50, sight: 130, from: 'barracks', role:'atk',  dmg:22, range:110, cool:1.2, target:'vehicle', armor:'inf', bonus:{vehicle:2.0} },
+  tank:      { name: '主战坦克', icon: '🛡️', cost: 500, hp: 280, speed: 60, sight: 150, from: 'warfactory', role:'atk', dmg:30, range:90, cool:1.0, target:'any',     armor:'vehicle', bonus:{inf:1.5} },
+  artillery: { name: '火箭车',   icon: '💥', cost: 700, hp: 180, speed: 50, sight: 160, from: 'warfactory', role:'atk', dmg:45, range:220, cool:2.0, target:'any',    armor:'vehicle', bonus:{building:1.5} },
+  // —— 高级兵种(需作战实验室)——
+  apocalypse:{ name: '天启坦克', icon: '☠️', cost: 900, hp: 500, speed: 45, sight: 140, from: 'warfactory', role:'atk', dmg:45, range:100, cool:1.4, target:'any', armor:'heavy', prereq:['lab'], bonus:{inf:1.8, vehicle:1.3} },
+  prism:     { name: '光棱坦克', icon: '💎', cost: 800, hp: 200, speed: 55, sight: 170, from: 'warfactory', role:'atk', dmg:55, range:200, cool:1.8, target:'any', armor:'vehicle', prereq:['lab'], atk:'laser', bonus:{building:1.8} },
+  tesla:     { name: '磁暴步兵', icon: '⚡', cost: 400, hp: 120, speed: 50, sight: 130, from: 'barracks', role:'atk', dmg:35, range:90, cool:1.0, target:'inf', armor:'inf', prereq:['lab'], atk:'tesla', bonus:{inf:2.0, heavy:1.5} },
+};
+// 兵种克制倍率表:bonus[攻击者护甲偏好][目标护甲] = 伤害倍率(默认1.0)
+// 已在各单位 bonus 字段内联,这里集中保留默认倍率
+var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
 
   var TEAM_COLOR = { player: '#3da9fc', enemy: '#ff4d4d' };
   var MINE_COLOR = '#ffd54a';
@@ -46,6 +55,9 @@
     var cam, view, keys, running, paused, over, won, rafId, last, acc, frame;
     var oreP, oreE, powerP, powerE;            // 双方资源/电力
     var buildings, units, mines, bullets, particles, floatTexts;
+    var nukeMissiles;      // 飞行中的核弹 {sx,sy,tx,ty,t,dur,team}
+    var shockwaves;        // 冲击波 {x,y,r,maxR,life}
+    var camShake;          // 屏幕震动强度
     var selected,             // 选中的单位数组
         buildMode,            // 待放置建筑kind | null
         prodQueue,            // 双方生产队列 {team, from, kind, t, total}
@@ -64,6 +76,7 @@
       keys = {};
       oreP = 1500; oreE = 1000; powerP = 0; powerE = 0;
       buildings = []; units = []; bullets = []; particles = []; floatTexts = [];
+      nukeMissiles = []; shockwaves = []; camShake = 0;
       mines = []; selected = []; buildMode = null; prodQueue = [];
       nukeCharge = { player: 0, enemy: 0 }; nukeTargeting = false;
       enemyAItimer = 40; enemyAIwave = 0; score = 0; kills = 0;
@@ -127,6 +140,8 @@
     function canProduce(team, kind) {
       var def = UNITS[kind];
       if (!hasBuilding(team, def.from)) return false;
+      // 兵种前置建筑(如高级兵种需作战实验室)
+      if (def.prereq && !def.prereq.every(function (p) { return hasBuilding(team, p); })) return false;
       // 矿车数量受精炼厂限制
       if (kind === 'harvester') {
         var refs = buildings.filter(function (b) { return b.team === team && b.kind === 'refinery' && !b.building; }).length;
@@ -181,7 +196,7 @@
           if (b.prod <= 0) {
             var enemy = nearestEnemy(b.x, b.y, b.team, def.range);
             if (enemy) {
-              fireBullet(b.x, b.y - 10, enemy, def.dmg, b.team);
+              fireBullet(b.x, b.y - 10, enemy, def.dmg, b.team, BUILDINGS.turret.atk);
               b.prod = def.cool;
             }
           }
@@ -196,10 +211,40 @@
           var tx = bl.target.x, ty = bl.target.y - 10;
           var dx = tx - bl.x, dy = ty - bl.y, d = Math.hypot(dx, dy) || 1;
           bl.x += dx / d * 360 * dt; bl.y += dy / d * 360 * dt;
-          if (d < 16) { damage(bl.target, bl.dmg, bl.team); bl.dead = true; spark(bl.x, bl.y, '#ffb627', 6); }
+          if (d < 16) {
+            var mult = counterMult(bl.atkDef, bl.target);
+            var realDmg = Math.round(bl.dmg * mult);
+            damage(bl.target, realDmg, bl.team);
+            if (mult > 1.2) showFloat(bl.target.x, bl.target.y - 14, Math.round(realDmg) + '!', '#ffd54a');
+            bl.dead = true;
+            // 攻击特效差异化
+            var col = bl.atkDef && bl.atkDef.atk === 'laser' ? '#00e0ff' : bl.atkDef && bl.atkDef.atk === 'tesla' ? '#7cf6ff' : '#ffb627';
+            spark(bl.x, bl.y, col, bl.atkDef && bl.atkDef.atk ? 8 : 6);
+          }
         } else bl.dead = true;
       });
       bullets = bullets.filter(function (b) { return !b.dead && b.t > 0; });
+      // 核弹飞行:推进时间,到达后落地爆炸
+      for (var ni = nukeMissiles.length - 1; ni >= 0; ni--) {
+        var nm = nukeMissiles[ni];
+        nm.t += dt;
+        // 飞行拖尾(火焰+烟雾)
+        var prog = nm.t / nm.dur;
+        // 抛物线位置:起点→高点→落点
+        var mx = nm.sx + (nm.tx - nm.sx) * prog;
+        var my = nm.sy + (nm.ty - nm.sy) * prog - Math.sin(prog * Math.PI) * 120; // 拱起120px
+        if (Math.random() < 0.9) {
+          particles.push({ x: mx + (Math.random()-0.5)*4, y: my + (Math.random()-0.5)*4,
+            vx: (Math.random()-0.5)*30, vy: 30 + Math.random()*30, life: 0.4 + Math.random()*0.3,
+            color: Math.random() < 0.5 ? '#ff4d4d' : '#888', r: 3 + Math.random()*2 });
+        }
+        if (nm.t >= nm.dur) { nukeImpact(nm.tx, nm.ty, nm.team); nukeMissiles.splice(ni, 1); }
+      }
+      // 冲击波扩散
+      shockwaves.forEach(function (s) { s.r += (s.maxR - s.r) * 0.12; s.life -= dt; });
+      shockwaves = shockwaves.filter(function (s) { return s.life > 0; });
+      // 震屏衰减
+      if (camShake > 0) camShake = Math.max(0, camShake - dt * 40);
       // 粒子
       particles.forEach(function (p) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
       particles = particles.filter(function (p) { return p.life > 0; });
@@ -233,7 +278,7 @@
         if (d > u.def.range) {
           moveToward(u, u.target.x, u.target.y, STEP);
         } else if (u.cool <= 0) {
-          fireBullet(u.x, u.y - 6, u.target, u.def.dmg, u.team); u.cool = u.def.cool;
+          fireBullet(u.x, u.y - 6, u.target, u.def.dmg, u.team, u.def); u.cool = u.def.cool;
         }
         // 自动索敌(若闲置或目标走远,自动打最近敌人)
       } else if (u.cmd === 'move') {
@@ -248,7 +293,7 @@
     function autoEngage(u) {
       if (u.cool > 0) return;
       var e = nearestEnemy(u.x, u.y, u.team, u.def.sight);
-      if (e) { fireBullet(u.x, u.y - 6, e, u.def.dmg, u.team); u.cool = u.def.cool; }
+      if (e) { fireBullet(u.x, u.y - 6, e, u.def.dmg, u.team, u.def); u.cool = u.def.cool; }
     }
     function updateHarvester(u) {
       if (!u.mineTarget) {
@@ -264,7 +309,7 @@
         u.mineT += STEP;
         if (u.mineT > 1.5) { u.cargo = 50; u.miningState = 'toBase'; }
       } else { // toBase
-        var ref = buildings.filter(function (b) { return b.team === u.team && b.kind === 'refinery' && !b.building; })[0];
+        var ref = nearestRefinery(u.x, u.y, u.team);
         if (!ref) { u.miningState = 'toMine'; return; }
         if (dist(u, ref) < 70) {
           if (u.team === 'player') oreP += u.cargo; else oreE += u.cargo;
@@ -312,9 +357,31 @@
       mines.forEach(function (m) { var d = Math.hypot(m.x - x, m.y - y); if (d < bd) { bd = d; best = m; } });
       return best;
     }
+    // 找最近的己方精炼厂(修复矿车不回最近精炼厂的 bug:原 filter[0] 固定取第一个)
+    function nearestRefinery(x, y, team) {
+      var best = null, bd = 1e9;
+      buildings.forEach(function (b) {
+        if (b.team !== team || b.kind !== 'refinery' || b.building) return;
+        var d = Math.hypot(b.x - x, b.y - y);
+        if (d < bd) { bd = d; best = b; }
+      });
+      return best;
+    }
     function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-    function fireBullet(x, y, target, dmg, team) {
-      bullets.push({ x: x, y: y, target: target, dmg: dmg, team: team, t: 2.0 });
+    // 开火:子弹记录攻击者 def,落地时按克制倍率结算伤害
+    function fireBullet(x, y, target, dmg, team, atkDef) {
+      bullets.push({ x: x, y: y, target: target, dmg: dmg, team: team, atkDef: atkDef, t: 2.0 });
+    }
+    // 目标护甲类型(单位读 def.armor,建筑统一 'building')
+    function armorOf(obj) {
+      if (obj.def) return obj.def.armor || 'inf';
+      return 'building';
+    }
+    // 克制倍率:atkDef.bonus[目标armor] × ,无则 1.0
+    function counterMult(atkDef, target) {
+      if (!atkDef || !atkDef.bonus) return 1;
+      var arm = armorOf(target);
+      return atkDef.bonus[arm] || 1;
     }
     function damage(obj, dmg, fromTeam) {
       obj.hp -= dmg;
@@ -338,6 +405,10 @@
         var a = Math.random() * 7, sp = 40 + Math.random() * 120;
         particles.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5 + Math.random() * 0.4, color: col, r: 2 + Math.random() * 2 });
       }
+    }
+    // 浮动文字(伤害数字/暴击提示),向上飘 + 淡出
+    function showFloat(x, y, text, col) {
+      floatTexts.push({ x: x, y: y, text: text, color: col, life: 0.9 });
     }
 
     // ---------- 战争迷雾 ----------
@@ -372,12 +443,20 @@
       if (oreE >= 300 && !hasBuilding('enemy', 'barracks')) tryBuild('enemy', 'barracks');
       if (oreE >= 600 && !hasBuilding('enemy', 'warfactory')) tryBuild('enemy', 'warfactory');
       if (oreE >= 350 && !hasBuilding('enemy', 'turret') && hasBuilding('enemy', 'barracks')) tryBuild('enemy', 'turret');
+      if (oreE >= 500 && !hasBuilding('enemy', 'radar') && hasBuilding('enemy', 'barracks')) tryBuild('enemy', 'radar');
+      // 高级建筑:雷达后造核电站(解电)和作战实验室(解锁高级兵)
+      if (oreE >= 1200 && !hasBuilding('enemy', 'nuclearplant') && hasBuilding('enemy', 'radar')) tryBuild('enemy', 'nuclearplant');
+      if (oreE >= 1000 && !hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'radar')) tryBuild('enemy', 'lab');
       // 造兵(兵力上限低)
-      if (countUnits('enemy') < 12) {
+      if (countUnits('enemy') < 14) {
         // 优先补矿车保经济(矿车从战车工厂生产,数量受精炼厂上限)
         var ehvs = units.filter(function (u) { return u.team === 'enemy' && u.kind === 'harvester'; }).length;
         var erefs = buildings.filter(function (b) { return b.team === 'enemy' && b.kind === 'refinery' && !b.building; }).length;
         if (ehvs < erefs * 2 && hasBuilding('enemy', 'warfactory') && oreE >= 300) tryProduce('enemy', 'harvester');
+        // 高级兵种(有作战实验室时优先造,提升威胁)
+        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'warfactory') && oreE >= 900 && Math.random() < 0.4) tryProduce('enemy', 'apocalypse');
+        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'warfactory') && oreE >= 800 && Math.random() < 0.3) tryProduce('enemy', 'prism');
+        else if (hasBuilding('enemy', 'lab') && hasBuilding('enemy', 'barracks') && oreE >= 400 && Math.random() < 0.3) tryProduce('enemy', 'tesla');
         else if (hasBuilding('enemy', 'warfactory') && oreE >= 500) tryProduce('enemy', 'tank');
         else if (hasBuilding('enemy', 'barracks') && oreE >= 100) tryProduce('enemy', 'soldier');
       }
@@ -495,13 +574,34 @@
     function launchNuke(wx, wy) {
       if (nukeCharge.player < 1) { toast('核弹尚未充能'); return; }
       nukeCharge.player = 0; nukeTargeting = false;
-      // 落点范围伤害
+      // 找发射井作为起点
+      var silo = buildings.filter(function (b) { return b.team === 'player' && b.kind === 'nuke' && !b.building; })[0];
+      var sx = silo ? silo.x : 0, sy = silo ? silo.y - 30 : 0;
       toast('☢️ 核弹发射!');
+      // 发射特效:发射井闪光 + 烟雾
+      if (silo) { spark(silo.x, silo.y, '#ffd54a', 24); spark(silo.x, silo.y, '#ff4d4d', 16); }
+      // 推入飞行核弹(抛物线,1.6秒到达)
+      nukeMissiles.push({ sx: sx, sy: sy, tx: wx, ty: wy, t: 0, dur: 1.6, team: 'player' });
+    }
+    // 核弹落地:范围伤害 + 冲击波 + 蘑菇云 + 震屏
+    function nukeImpact(wx, wy, team) {
       var R = 220;
-      units.forEach(function (u) { if (Math.hypot(u.x - wx, u.y - wy) < R) damage(u, 9999, 'player'); });
-      buildings.forEach(function (b) { if (b.team !== 'player' && Math.hypot(b.x - wx, b.y - wy) < R) damage(b, 1500, 'player'); });
-      // 大爆炸粒子
-      for (var i = 0; i < 80; i++) { var a = Math.random() * 7, sp = 100 + Math.random() * 300; particles.push({ x: wx, y: wy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.2, color: i % 2 ? '#ff4d4d' : '#ffd54a', r: 4 }); }
+      units.forEach(function (u) { if (Math.hypot(u.x - wx, u.y - wy) < R) damage(u, 9999, team); });
+      buildings.forEach(function (b) { if (b.team !== team && Math.hypot(b.x - wx, b.y - wy) < R) damage(b, 1500, team); });
+      // 冲击波环
+      shockwaves.push({ x: wx, y: wy, r: 20, maxR: R * 1.4, life: 0.8 });
+      // 蘑菇云:多层粒子(柱状上升 + 四散)
+      for (var i = 0; i < 60; i++) {
+        var a = -Math.PI/2 + (Math.random() - 0.5) * 0.8; // 向上
+        var sp = 60 + Math.random() * 180;
+        particles.push({ x: wx, y: wy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.2 + Math.random() * 0.5, color: i % 3 === 0 ? '#ff4d4d' : (i % 3 === 1 ? '#ffd54a' : '#888'), r: 4 + Math.random() * 4 });
+      }
+      for (var j = 0; j < 40; j++) { // 水平四散
+        var a2 = Math.random() * 7, sp2 = 150 + Math.random() * 250;
+        particles.push({ x: wx, y: wy, vx: Math.cos(a2) * sp2, vy: Math.sin(a2) * sp2, life: 0.8, color: '#ffd54a', r: 3 + Math.random() * 3 });
+      }
+      camShake = 18;  // 屏幕震动
+      showFloat(wx, wy - 30, '☠️ 核爆', '#ff4d4d');
     }
 
     // ---------- 相机 ----------
@@ -539,7 +639,10 @@
       // 背景
       ctx.fillStyle = '#0a1410'; ctx.fillRect(0, 0, VW, VH);
       ctx.save();
-      ctx.translate(-cam.x, -cam.y);
+      // 震屏:核弹落地时相机随机抖动
+      var shx = 0, shy = 0;
+      if (camShake > 0) { shx = (Math.random() - 0.5) * camShake; shy = (Math.random() - 0.5) * camShake; }
+      ctx.translate(-cam.x + shx, -cam.y + shy);
       // 地形网格
       drawTerrain();
       // 矿脉
@@ -557,9 +660,38 @@
         ctx.fillStyle = TEAM_COLOR[bl.team]; ctx.shadowBlur = 8; ctx.shadowColor = TEAM_COLOR[bl.team];
         ctx.beginPath(); ctx.arc(bl.x, bl.y, 3, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
       });
+      // 核弹飞行物(抛物线上的导弹)
+      nukeMissiles.forEach(function (nm) {
+        var prog = Math.min(1, nm.t / nm.dur);
+        var mx = nm.sx + (nm.tx - nm.sx) * prog;
+        var my = nm.sy + (nm.ty - nm.sy) * prog - Math.sin(prog * Math.PI) * 120;
+        ctx.save(); ctx.translate(mx, my);
+        var dx = (nm.tx - nm.sx), dy = (nm.ty - nm.sy) - Math.cos(prog * Math.PI) * 120 * Math.PI;
+        ctx.rotate(Math.atan2(dy, dx) + Math.PI/2);
+        ctx.shadowBlur = 14; ctx.shadowColor = '#ff4d4d';
+        ctx.fillStyle = '#eaf0fb'; ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(4, 4); ctx.lineTo(-4, 4); ctx.fill();
+        ctx.fillStyle = '#ff4d4d'; ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(3, 11); ctx.lineTo(-3, 11); ctx.fill();
+        ctx.shadowBlur = 0; ctx.restore();
+      });
+      // 冲击波环
+      shockwaves.forEach(function (s) {
+        ctx.globalAlpha = Math.max(0, s.life / 0.8);
+        ctx.strokeStyle = '#ffd54a'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.stroke();
+        ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 0.85, 0, 7); ctx.stroke();
+        ctx.globalAlpha = 1; ctx.lineWidth = 1;
+      });
       // 粒子
       particles.forEach(function (p) { ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color; ctx.fillRect(p.x - p.r / 2, p.y - p.r / 2, p.r, p.r); });
       ctx.globalAlpha = 1;
+      // 浮动文字(伤害数字)
+      floatTexts.forEach(function (f) {
+        ctx.globalAlpha = Math.min(1, f.life / 0.9); ctx.fillStyle = f.color;
+        ctx.font = 'bold 14px Rajdhani, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(f.text, f.x, f.y);
+      });
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
       // 框选
       if (isDragging && dragStart) {
         var x0 = Math.min(dragStart.x, mouse.x) + cam.x, y0 = Math.min(dragStart.y, mouse.y) + cam.y;
@@ -739,7 +871,7 @@
         ctx.fillStyle = MINE_COLOR; ctx.beginPath(); ctx.moveTo(-16, H + 2); ctx.lineTo(-10, H - 6); ctx.lineTo(-4, H + 2); ctx.fill();
         ctx.fillStyle = shade(MINE_COLOR, -0.2); ctx.beginPath(); ctx.moveTo(-10, H - 6); ctx.lineTo(-4, H + 2); ctx.lineTo(-7, H + 2); ctx.fill();
       } else if (kind === 'barracks') {
-        // 兵营:尖顶营房 + ★军徽 + 两侧岗亭
+        // 兵营:尖顶营房 + ★军徽 + 两侧岗亭 + 飘旗 + 门灯脉动
         ctx.fillStyle = mid;
         ctx.beginPath(); ctx.moveTo(-14, H + 4); ctx.lineTo(0, H - 12); ctx.lineTo(14, H + 4); ctx.fill(); // 尖顶
         ctx.fillStyle = dark; ctx.fillRect(-14, H + 2, 28, 4); // 屋檐
@@ -748,7 +880,15 @@
         ctx.fillText('★', 0, H - 1);
         // 两侧岗亭
         ctx.fillStyle = dark; ctx.fillRect(-17, H - 4, 4, 10); ctx.fillRect(13, H - 4, 4, 10);
-        ctx.textBaseline = 'alphabetic';
+        // 尖顶飘旗(动画)
+        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, H - 12); ctx.lineTo(0, H - 22); ctx.stroke();
+        var bfw = Math.sin(frame * 0.12) * 2 + 5;
+        ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, H - 22); ctx.lineTo(bfw + 4, H - 19); ctx.lineTo(0, H - 16); ctx.fill();
+        // 门灯(脉动)
+        var bpulse = 0.5 + 0.5 * Math.sin(frame * 0.15);
+        ctx.fillStyle = 'rgba(255,213,74,' + bpulse + ')';
+        ctx.fillRect(-2, H + 4, 4, 2);
+        ctx.textBaseline = 'alphabetic'; ctx.lineWidth = 1;
       } else if (kind === 'warfactory') {
         // 战车工厂:履带传送带(滚动)+ 中央齿轮(旋转)+ 起重机臂
         ctx.fillStyle = '#333'; ctx.fillRect(-16, H + 0, 32, 5);
@@ -760,6 +900,14 @@
         for (var gi = 0; gi < 8; gi++) { var ga = gi / 8 * 7; ctx.fillRect(Math.cos(ga) * 8 - 1.5, Math.sin(ga) * 8 - 1.5, 3, 3); }
         ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
         ctx.restore();
+        // 起重机臂(摆动动画)
+        var craneAng = Math.sin(frame * 0.03) * 0.4 - 0.6; // 摆动范围
+        ctx.strokeStyle = dark; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-14, H - 8); ctx.lineTo(-14 + Math.cos(craneAng) * 18, H - 8 + Math.sin(craneAng) * 18); ctx.stroke();
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.arc(-14 + Math.cos(craneAng) * 18, H - 8 + Math.sin(craneAng) * 18, 2.5, 0, 7); ctx.fill(); // 吊钩
+        ctx.fillRect(-15, H - 10, 3, 4); // 基座
+        ctx.lineWidth = 1;
       } else if (kind === 'radar') {
         // 雷达站:抛物面圆顶 + 双旋转扫描线
         ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(0, H, 14, Math.PI, 7); ctx.fill();
@@ -802,6 +950,49 @@
         ctx.beginPath(); ctx.arc(0, H, 3, 0, 7); ctx.fill();
         ctx.shadowBlur = 0;
         ctx.lineWidth = 1;
+      } else if (kind === 'nuclearplant') {
+        // 核电站:反应堆圆顶 + 冷却塔 + 绿色辐射光环(脉动)+ 蒸汽
+        var npulse = 0.4 + 0.4 * Math.sin(frame * 0.08);
+        // 辐射光环
+        ctx.strokeStyle = 'rgba(46,230,166,' + npulse + ')'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, H, 15 + npulse * 3, 0, 7); ctx.stroke();
+        // 中央反应堆圆顶(多层渐变)
+        ctx.fillStyle = dark; ctx.fillRect(-8, H - 14, 16, 14);
+        ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(0, H - 14, 8, 0, 7); ctx.fill();
+        ctx.fillStyle = shade(col, 0.5); ctx.beginPath(); ctx.arc(0, H - 16, 5, 0, 7); ctx.fill();
+        // 辐射符号(黄)
+        ctx.fillStyle = '#ffd54a'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('☢', 0, H - 14);
+        ctx.textBaseline = 'alphabetic';
+        // 两侧冷却塔 + 蒸汽
+        [-14, 14].forEach(function (dx, i) {
+          ctx.fillStyle = mid; ctx.fillRect(dx - 3, H - 12, 6, 12);
+          ctx.fillStyle = shade(col, 0.4); ctx.beginPath(); ctx.arc(dx, H - 12, 4, 0, 7); ctx.fill();
+          var rise = (frame * 0.4 + i * 20) % 30;
+          ctx.fillStyle = 'rgba(255,255,255,' + (0.25 - rise / 120) + ')';
+          ctx.beginPath(); ctx.arc(dx, H - 16 - rise * 0.3, 2.5 + rise * 0.04, 0, 7); ctx.fill();
+        });
+        ctx.lineWidth = 1;
+      } else if (kind === 'lab') {
+        // 作战实验室:旋转分子模型 + 蓝色能量场 + 试管
+        var lpulse = 0.3 + 0.3 * Math.sin(frame * 0.1);
+        // 能量场
+        ctx.fillStyle = 'rgba(0,224,255,' + (lpulse * 0.3) + ')'; ctx.beginPath(); ctx.arc(0, H, 14, 0, 7); ctx.fill();
+        // 试管/烧瓶基座
+        ctx.fillStyle = dark; ctx.fillRect(-10, H - 10, 20, 10);
+        // 旋转分子(3球绕中心)
+        ctx.save(); ctx.translate(0, H - 8); ctx.rotate(frame * 0.05);
+        ctx.fillStyle = '#00e0ff'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
+        for (var mi = 0; mi < 3; mi++) {
+          var ma = mi / 3 * 7;
+          ctx.fillStyle = shade('#00e0ff', 0.3); ctx.beginPath(); ctx.arc(Math.cos(ma) * 8, Math.sin(ma) * 8, 3, 0, 7); ctx.fill();
+          ctx.strokeStyle = 'rgba(0,224,255,0.4)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ma) * 8, Math.sin(ma) * 8); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.fillStyle = '#00e0ff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('🔬', 0, H - 24);
+        ctx.textBaseline = 'alphabetic'; ctx.lineWidth = 1;
       }
     }
     // 名字标签:半透明底条 + 白字
@@ -850,6 +1041,40 @@
         ctx.shadowBlur = 0; ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(6, -8, 16, 3); // 长炮管
         ctx.fillRect(-3, -8, 3, 6); ctx.fillRect(2, -8, 3, 6); // 多管
+      } else if (u.kind === 'apocalypse') {
+        // 天启坦克:重型履带 + 大车身 + 双管炮塔
+        ctx.fillStyle = sideCol; roundRect(-16, -3, 32, 13, 3); ctx.fill();
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-17, 6, 34, 3); ctx.fillRect(-17, -4, 34, 2); // 履带
+        ctx.fillStyle = topCol; ctx.beginPath(); ctx.arc(0, -4, 10, 0, 7); ctx.fill(); // 大炮塔
+        ctx.fillStyle = '#0d0d0d'; ctx.fillRect(-5, -18, 3, 14); ctx.fillRect(2, -18, 3, 14); // 双管
+        ctx.fillStyle = shade(col, 0.5); ctx.beginPath(); ctx.arc(0, -4, 4, 0, 7); ctx.fill();
+      } else if (u.kind === 'prism') {
+        // 光棱坦克:细长车身 + 棱镜水晶顶 + 蓝色激光炮管
+        ctx.fillStyle = sideCol; roundRect(-12, -2, 24, 12, 3); ctx.fill();
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-13, 5, 26, 2);
+        // 棱镜水晶(闪烁蓝)
+        var pshine = 0.6 + 0.4 * Math.sin(frame * 0.15);
+        ctx.fillStyle = 'rgba(0,224,255,' + pshine + ')'; ctx.shadowBlur = 10; ctx.shadowColor = '#00e0ff';
+        ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(5, -6); ctx.lineTo(0, -2); ctx.lineTo(-5, -6); ctx.fill();
+        ctx.shadowBlur = 6; ctx.shadowColor = col;
+        ctx.fillStyle = '#0d0d0d'; ctx.fillRect(-1, -18, 2, 8); // 细激光管
+      } else if (u.kind === 'tesla') {
+        // 磁暴步兵:身背电击枪 + 周围电弧粒子(蓝色闪电)
+        ctx.fillStyle = topCol; ctx.beginPath(); ctx.arc(0, -5, 5, 0, 7); ctx.fill(); // 头
+        ctx.fillStyle = sideCol; roundRect(-6, -1, 12, 10, 2); ctx.fill(); // 身(略大)
+        // 电击枪(双叉)
+        ctx.fillStyle = '#0d0d0d'; ctx.fillRect(-1, -7, 2, 4); ctx.fillRect(-3, -9, 2, 3); ctx.fillRect(1, -9, 2, 3);
+        // 电弧特效(随机闪电粒子)
+        if (frame % 4 < 2) {
+          ctx.strokeStyle = 'rgba(124,246,255,0.8)'; ctx.lineWidth = 1.5;
+          for (var ei = 0; ei < 2; ei++) {
+            var ea = Math.random() * 7, er = 8 + Math.random() * 6;
+            ctx.beginPath(); ctx.moveTo(0, -4);
+            ctx.lineTo(Math.cos(ea) * er * 0.5 - 2, -4 + Math.sin(ea) * er * 0.5);
+            ctx.lineTo(Math.cos(ea) * er, -4 + Math.sin(ea) * er); ctx.stroke();
+          }
+          ctx.lineWidth = 1;
+        }
       } else {
         // 步兵:圆头身(3D 小人)
         ctx.fillStyle = topCol; ctx.beginPath(); ctx.arc(0, -4, 5, 0, 7); ctx.fill(); // 头
@@ -943,11 +1168,11 @@
 
       // 收集所有面板项(建筑组 + 单位组,带分组标题)
       var items = [];
-      var bkeys = ['power', 'refinery', 'barracks', 'warfactory', 'radar', 'turret'].concat(NUKE_ENABLED ? ['nuke'] : []);
+      var bkeys = ['power', 'refinery', 'barracks', 'warfactory', 'radar', 'turret', 'nuclearplant', 'lab'].concat(NUKE_ENABLED ? ['nuke'] : []);
       items.push({ divider: '🏗 建筑' });
       bkeys.forEach(function (k) { items.push({ type: 'building', kind: k }); });
       items.push({ divider: '⚔ 单位' });
-      ['soldier', 'missile', 'harvester', 'tank', 'artillery'].forEach(function (k) { items.push({ type: 'unit', kind: k }); });
+      ['soldier', 'missile', 'tesla', 'harvester', 'tank', 'artillery', 'apocalypse', 'prism'].forEach(function (k) { items.push({ type: 'unit', kind: k }); });
 
       // 计算内容总高,裁剪 + 滚动
       var contentTop = y0 + 32;
