@@ -81,6 +81,7 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       nukeCharge = { player: 0, enemy: 0 }; nukeTargeting = false;
       enemyAItimer = 40; enemyAIwave = 0; score = 0; kills = 0;
       over = false; won = false; frame = 0; acc = 0; last = 0;
+      initFog();
       // 生成矿脉(地图各处)
       var spots = [[300,300],[1300,700],[800,200],[800,800],[500,750],[1100,250],[250,500],[1350,500]];
       spots.forEach(function (s) { mines.push({ x: s[0], y: s[1], r: 40, amount: 99999 }); });
@@ -97,9 +98,6 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       addUnit('harvester', 'enemy', 1280, 240);
       recomputePower('player'); recomputePower('enemy');
       emitScore(); emitState('playing');
-      fogCtx.clearRect(0, 0, MAP_W, MAP_H);
-      fogCtx.fillStyle = 'rgba(0,0,0,1)';
-      fogCtx.fillRect(0, 0, MAP_W, MAP_H);
     }
 
     function emitScore() { hooks.onScore && hooks.onScore(score | 0, 1); }
@@ -248,6 +246,8 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       // 粒子
       particles.forEach(function (p) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
       particles = particles.filter(function (p) { return p.life > 0; });
+      // 粒子上限:超过 500 个时丢弃最旧的,防止堆积卡顿
+      if (particles.length > 500) particles.splice(0, particles.length - 500);
       floatTexts.forEach(function (f) { f.y -= 20 * dt; f.life -= dt; });
       floatTexts = floatTexts.filter(function (f) { return f.life > 0; });
       // 单位软碰撞分离
@@ -292,8 +292,22 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
     }
     function autoEngage(u) {
       if (u.cool > 0) return;
-      var e = nearestEnemy(u.x, u.y, u.team, u.def.sight);
-      if (e) { fireBullet(u.x, u.y - 6, e, u.def.dmg, u.team, u.def); u.cool = u.def.cool; }
+      // 索敌节流:不是每帧都全图扫描,每 0.2 秒扫一次(单位自带 engageCD)
+      u.engageCD = (u.engageCD || 0) - STEP;
+      var e;
+      if (u.engageCD > 0) {
+        // 复用上次目标(若还活着且在射程)
+        if (u.lastTarget && u.lastTarget.hp > 0 && dist(u, u.lastTarget) < u.def.range) e = u.lastTarget;
+        else return;
+      } else {
+        u.engageCD = 0.25;
+        e = nearestEnemy(u.x, u.y, u.team, u.def.sight);
+        u.lastTarget = e;
+      }
+      if (e) {
+        if (dist(u, e) > u.def.range) return; // 视野内但射程外,不开火
+        fireBullet(u.x, u.y - 6, e, u.def.dmg, u.team, u.def); u.cool = u.def.cool;
+      }
     }
     function updateHarvester(u) {
       if (!u.mineTarget) {
@@ -323,32 +337,35 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       u.x = Math.max(8, Math.min(MAP_W - 8, u.x)); u.y = Math.max(8, Math.min(MAP_H - 8, u.y));
     }
     function separateUnits() {
-      var us = units;
-      for (var i = 0; i < us.length; i++) {
-        for (var j = i + 1; j < us.length; j++) {
-          var a = us[i], b = us[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
-          var minD = 26;
-          if (d > 0 && d < minD) {
-            var push = (minD - d) / 2 * 0.5;
-            a.x -= dx / d * push; a.y -= dy / d * push;
-            b.x += dx / d * push; b.y += dy / d * push;
-          }
+      var us = units, n = us.length;
+      var minD = 26, minD2 = minD * minD;
+      for (var i = 0; i < n; i++) {
+        var a = us[i];
+        // 快速剔除:屏幕外的单位不参与分离(可见区内才处理)
+        if (a.x < cam.x - 40 || a.x > cam.x + VW + 40 || a.y < cam.y - 40 || a.y > cam.y + VH + 40) continue;
+        for (var j = i + 1; j < n; j++) {
+          var b = us[j];
+          var dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+          if (d2 >= minD2 || d2 === 0) continue; // 平方距离剔除,省开方
+          var d = Math.sqrt(d2), push = (minD - d) / 2 * 0.5;
+          a.x -= dx / d * push; a.y -= dy / d * push;
+          b.x += dx / d * push; b.y += dy / d * push;
         }
       }
     }
     function nearestEnemy(x, y, team, range) {
-      var best = null, bd = range;
+      var best = null, bd = range, bd2 = range * range;
       for (var i = 0; i < units.length; i++) {
         var u = units[i];
         if (u.team === team || u.hp <= 0) continue;
-        var d = Math.hypot(u.x - x, u.y - y);
-        if (d < bd) { bd = d; best = u; }
+        var dx = u.x - x, dy = u.y - y, d2 = dx * dx + dy * dy; // 平方距离,省 Math.hypot 开方
+        if (d2 < bd2) { bd2 = d2; best = u; }
       }
       for (var j = 0; j < buildings.length; j++) {
         var b = buildings[j];
         if (b.team === team || b.hp <= 0) continue;
-        var d2 = Math.hypot(b.x - x, b.y - y);
-        if (d2 < bd) { bd = d2; best = b; }
+        var bx = b.x - x, by = b.y - y, d2b = bx * bx + by * by;
+        if (d2b < bd2) { bd2 = d2b; best = b; }
       }
       return best;
     }
@@ -411,23 +428,58 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       floatTexts.push({ x: x, y: y, text: text, color: col, life: 0.9 });
     }
 
-    // ---------- 战争迷雾 ----------
+    // ---------- 战争迷雾(性能优化版)----------
+    // 双层:fogExplored(已探索,永久擦开)+ fogView(当前视野,每帧重建)
+    // 旧版每帧对每个实体 createRadialGradient 是性能杀手,改为:
+    // 1) 已探索层只在实体移动时增量擦开;2) 视野层用纯实心圆(无渐变)每帧重画
+    var fogExplored, fogView;
+    function initFog() {
+      fogExplored = document.createElement('canvas'); fogExplored.width = MAP_W; fogExplored.height = MAP_H;
+      var ec = fogExplored.getContext('2d');
+      ec.fillStyle = 'rgba(0,0,0,1)'; ec.fillRect(0, 0, MAP_W, MAP_H);
+      fogView = document.createElement('canvas'); fogView.width = MAP_W; fogView.height = MAP_H;
+    }
     function updateFog(dt) {
-      // 每帧把玩家单位/建筑视野用 destination-out 擦开
-      fogCtx.globalCompositeOperation = 'destination-out';
-      fogCtx.fillStyle = 'rgba(0,0,0,1)';
-      var ents = units.concat(buildings).filter(function (e) { return e.team === 'player'; });
+      // 1) 已探索层:增量擦开(只对屏幕内实体,destination-out 实心圆)
+      fogCtx._ec = fogCtx._ec || fogExplored.getContext('2d');
+      var ec = fogCtx._ec;
+      ec.globalCompositeOperation = 'destination-out';
+      ec.fillStyle = 'rgba(0,0,0,1)';
+      var ents = playerEntsInView();
+      ents.forEach(function (e) {
+        var def = e.def ? e.def : BUILDINGS[e.kind];
+        var s = (def ? def.sight : 100) * 0.8;
+        ec.beginPath(); ec.arc(e.x, e.y, s, 0, 7); ec.fill();
+      });
+      ec.globalCompositeOperation = 'source-over';
+      // 2) 视野层:每帧清空重画当前视野(实心圆,无渐变,快)
+      var vc = fogView.getContext('2d');
+      vc.clearRect(0, 0, MAP_W, MAP_H);
+      vc.globalCompositeOperation = 'destination-out';
+      vc.fillStyle = 'rgba(0,0,0,1)';
       ents.forEach(function (e) {
         var def = e.def ? e.def : BUILDINGS[e.kind];
         var s = def ? def.sight : 100;
-        var grad = fogCtx.createRadialGradient(e.x, e.y, 0, e.x, e.y, s);
-        grad.addColorStop(0, 'rgba(0,0,0,1)');
-        grad.addColorStop(0.7, 'rgba(0,0,0,0.7)');
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        fogCtx.fillStyle = grad;
-        fogCtx.beginPath(); fogCtx.arc(e.x, e.y, s, 0, 7); fogCtx.fill();
+        vc.beginPath(); vc.arc(e.x, e.y, s, 0, 7); vc.fill();
       });
-      fogCtx.globalCompositeOperation = 'source-over';
+      vc.globalCompositeOperation = 'source-over';
+    }
+    // 屏幕可见区域内的玩家实体(剔除屏幕外,减少迷雾计算量)
+    function playerEntsInView() {
+      var res = [];
+      for (var i = 0; i < units.length; i++) {
+        var u = units[i];
+        if (u.team !== 'player') continue;
+        if (u.x < cam.x - 200 || u.x > cam.x + VW + 200 || u.y < cam.y - 200 || u.y > cam.y + VH + 200) continue;
+        res.push(u);
+      }
+      for (var j = 0; j < buildings.length; j++) {
+        var b = buildings[j];
+        if (b.team !== 'player') continue;
+        if (b.x < cam.x - 300 || b.x > cam.x + VW + 300 || b.y < cam.y - 300 || b.y > cam.y + VH + 300) continue;
+        res.push(b);
+      }
+      return res;
     }
 
     // ---------- 敌方 AI(简单,偏弱) ----------
@@ -647,9 +699,13 @@ var ARMOR_TYPES = ['inf', 'vehicle', 'heavy', 'building'];
       drawTerrain();
       // 矿脉
       mines.forEach(drawMine);
-      // 雾(在世界坐标)
-      ctx.globalAlpha = 0.92;
-      ctx.drawImage(fogCanvas, 0, 0);
+      // 雾(双层合成,只画屏幕可见视口,不全图拷贝)
+      // 第一层:已探索雾(永久擦开的区域透明,未探索全黑)— 灰雾半透
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(fogExplored, cam.x, cam.y, VW, VH, cam.x, cam.y, VW, VH);
+      // 第二层:当前视野雾(视野外再叠一层更深的雾)— 完全黑
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(fogView, cam.x, cam.y, VW, VH, cam.x, cam.y, VW, VH);
       ctx.globalAlpha = 1;
       // 建筑
       buildings.forEach(drawBuilding);
