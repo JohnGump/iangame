@@ -45,6 +45,8 @@ fi
 
 c_info "配置 Nginx 站点"
 cp deploy/nginx.conf /etc/nginx/sites-available/iangame
+# 安全头配置(主配置里 include 引用,必须一并拷贝,否则 nginx -t 失败)
+cp deploy/nginx-security.conf /etc/nginx/sites-available/nginx-security.conf
 ln -sf /etc/nginx/sites-available/iangame /etc/nginx/sites-enabled/iangame
 # 移除默认站点避免抢占 80 端口
 rm -f /etc/nginx/sites-enabled/default
