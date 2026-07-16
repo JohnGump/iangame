@@ -1,9 +1,9 @@
 # iangame.com — 游戏门户 PRD / 技术设计
 
-> 深色霓虹电竞风的 HTML5 小游戏聚合站。12 款游戏免登录即玩,登录享云端记分与排行榜。
+> 深色霓虹电竞风的 HTML5 小游戏聚合站。14 款游戏免登录即玩,登录享云端记分与排行榜。
 
 ## 1. 产品定位
-- 域名 `iangame.com`,聚合 12 款经典 HTML5 游戏
+- 域名 `iangame.com`,聚合 14 款 HTML5 游戏(含 2 款大型原创:红警风 RTS、路径式塔防)
 - **游客**可玩全部游戏(本地记分);**登录用户**额外享全球排行榜 / 云端存分 / 收藏
 - 登录注册宽松:无验证码、无密码强度限制,仅基础长度校验
 
@@ -17,10 +17,11 @@
 | 前端 | 原生 HTML/CSS/JS + Canvas | 无构建步骤 |
 | WSGI | Gunicorn (2 worker) | 生产进程管理 |
 | 反代 | Nginx | 静态直出 + 反代 |
+| 入口隧道 | Cloudflare Tunnel (cloudflared) | 无公网入站端口,HTTPS 由 CF 管理 |
 
-架构:`浏览器 → Nginx:80 → Gunicorn:8000(Flask) → SQLite`;静态由 Nginx 直出。
+架构:`浏览器 ─HTTPS─> Cloudflare 边缘 ─tunnel─> cloudflared(本机) ─> Nginx:80 ─> Gunicorn:8000(Flask) ─> SQLite`;静态由 Nginx 直出。
 
-## 3. 游戏清单(12)
+## 3. 游戏清单(14)
 | slug | 名称 | 分类 | 要点 |
 |---|---|---|---|
 | pvz | 植物大战僵尸 | defense 塔防 | 5×9 网格,3 植物/3 僵尸,阳光与波次 |
@@ -33,8 +34,10 @@
 | gomoku | 五子棋 | battle 对战 | 人机,启发式 AI |
 | flappy | 像素小鸟 | casual 休闲 | 管道躲避 |
 | shooter | 飞机大战 | shooter 射击 | 滚动射击,道具 |
-| tankbattle | 坦克大战 | shooter 射击 | 玩家/敌坦克,砖墙 |
+| tankbattle | 坦克大战 | shooter 射制 | 玩家/敌坦克,砖墙 |
 | memory | 记忆翻牌 | puzzle 益智 | 翻牌配对计时 |
+| ironcommand | 铁幕指挥官 | strategy 策略 | 原创红警风 RTS:采矿/造基地/产兵/迷雾/科技树/核弹,3 难度 |
+| starfall | 星陨防线 | defense 塔防 | 太空科幻路径塔防:5 塔 6 敌 7 关战役,3 难度,可拆二级域名 |
 
 ## 4. 设计规范 — 深色霓虹电竞风
 - 背景:`#060912` 页 / `#0d1320` 卡 / `#141b2e` 悬浮
@@ -80,10 +83,13 @@ window.IanGame = {
 
 ## 8. 部署
 1. `python3 -m venv venv && pip install -r backend/requirements.txt`
-2. 初始化 SQLite(自动建表 + 灌入 12 款游戏元数据)
+2. 初始化 SQLite(自动建表 + `_seed()` 灌入 14 款游戏元数据;按 slug upsert,加新游戏无需删库)
 3. `gunicorn -w 2 -b 127.0.0.1:8000 wsgi:app`
 4. Nginx 反代 + 静态直出;systemd 托管,开机自启
-5. DNS:用户将 iangame.com A 记录指向本机公网 IP
+5. **入口走 Cloudflare Tunnel**(无公网入站端口,HTTPS 由 CF 管理):
+   `cloudflared tunnel login` 授权 iangame.com zone → 建 tunnel → `config.yml` 把 iangame.com 转到本机 :80 → systemd 托管
+   详细步骤见 [`deploy/SERVER_MIGRATION.md`](./deploy/SERVER_MIGRATION.md)(新机从零部署)
+   与 [`deploy/DEPLOY_TUNNEL.md`](./deploy/DEPLOY_TUNNEL.md)(tunnel 运维)
 
 ## 9. 并行实施编排
 - Wave 1 地基:后端 / 前端骨架 / 部署产物(并发)

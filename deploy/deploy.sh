@@ -97,6 +97,6 @@ fi
 echo ""
 echo "✅ 部署完成!"
 echo "   本机访问:  curl -H 'Host: iangame.com' http://127.0.0.1/"
-echo "   公网访问:  将 iangame.com 的 A 记录指向本机公网 IP,即可 http://iangame.com"
+echo "   公网访问:  配置 Cloudflare Tunnel(见 deploy/SERVER_MIGRATION.md 第 4 步)"
 echo "   服务状态:  systemctl status iangame"
 echo "   实时日志:  journalctl -u iangame -f"
