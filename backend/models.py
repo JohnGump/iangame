@@ -53,7 +53,7 @@ class LoginAttempt(db.Model):
     ts = db.Column(db.Float, nullable=False)  # 失败时间戳(epoch 秒)
 
 
-# 13 款游戏种子数据
+# 14 款游戏种子数据
 SEED_GAMES = [
     {"slug": "pvz", "name": "植物大战僵尸", "category": "defense", "icon": "🌻", "color": "#5fd35f",
      "desc": "布置植物军团,抵御一波波僵尸入侵草坪", "controls": "点击空地放置植物,收集阳光"},
@@ -82,6 +82,9 @@ SEED_GAMES = [
     {"slug": "ironcommand", "name": "铁幕指挥官", "category": "strategy", "icon": "⚙️", "color": "#3da9fc",
      "desc": "红警风即时战略:采矿、建造基地、生产军队,指挥作战摧毁敌方主基地(含战争迷雾、科技树、可选核弹)",
      "controls": "左键框选单位·右键移动/攻击·WASD移视野·右侧面板建造生产"},
+    {"slug": "starfall", "name": "星陨防线", "category": "defense", "icon": "🛰️", "color": "#00e0ff",
+     "desc": "太空科幻路径塔防:5种炮塔(光子/震荡/凝冰/雷电/天基)克制6种敌人,7关递进战役含Boss,三难度可调",
+     "controls": "点建塔卡片选塔→点空地建造·点塔可升级/卖出·1-5键快选·Tab加速·ESC取消"},
 ]
 
 CATEGORY_LABELS = {

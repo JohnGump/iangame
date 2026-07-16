@@ -1,6 +1,6 @@
 # iangame.com
 
-深色霓虹电竞风的 HTML5 小游戏聚合站,12 款游戏免登录即玩。
+深色霓虹电竞风的 HTML5 小游戏聚合站,14 款游戏免登录即玩。
 
 > **上手必读**:[`DEVELOPMENT.md`](./DEVELOPMENT.md) · [`PRD.md`](./PRD.md)
 
@@ -24,7 +24,7 @@ Flask 3 · SQLite · 原生 JS/Canvas · Gunicorn · Nginx · systemd
 ## 目录
 - `backend/` Flask 应用与 API
 - `templates/` Jinja2 模板
-- `static/` CSS / 站点 JS / 12 款游戏
+- `static/` CSS / 站点 JS / 14 款游戏
 - `deploy/` 部署配置
 - `PRD.md` 产品需求与技术设计
 - `DEVELOPMENT.md` 开发与 Git 规范

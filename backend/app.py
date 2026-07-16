@@ -394,11 +394,26 @@ def _game_pub(gm):
 
 
 def _seed():
-    if Game.query.first():
-        return
+    """按 slug upsert 种子游戏:已有库可补种新游戏,无需删库。
+    sort 以 SEED_GAMES 中的顺序为准(新游戏追加在末尾)。"""
+    changed = False
+    existing = {g.slug: g for g in Game.query.all()}
     for i, g in enumerate(SEED_GAMES):
-        db.session.add(Game(sort=i, **g))
-    db.session.commit()
+        row = existing.get(g['slug'])
+        if row is None:
+            db.session.add(Game(sort=i, **g))
+            changed = True
+        else:
+            # 同步显示字段与排序(不改 id)
+            for k in ('name', 'category', 'icon', 'color', 'desc', 'controls'):
+                if getattr(row, k) != g.get(k):
+                    setattr(row, k, g.get(k))
+                    changed = True
+            if row.sort != i:
+                row.sort = i
+                changed = True
+    if changed:
+        db.session.commit()
 
 
 if __name__ == '__main__':

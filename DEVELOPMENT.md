@@ -7,7 +7,7 @@
 
 ## 0. 一句话总览
 Flask + 原生 JS/Canvas + SQLite + Nginx 的深色霓虹电竞风游戏聚合站。
-12 款游戏各自独立文件,通过**统一接口契约**接入站点,可独立开发、独立替换。
+14 款游戏各自独立文件,通过**统一接口契约**接入站点,可独立开发、独立替换。
 
 ---
 
@@ -143,7 +143,7 @@ gunicorn -w 2 -b 127.0.0.1:8000 wsgi:app
 ## 7. 测试 / 验证清单(改完必过)
 - [ ] `python -c "from backend.app import create_app; create_app()"` 能启动(语法/导入正确)
 - [ ] 首页 `/`、大厅 `/games`、各 `/play/<slug>` 返回 200
-- [ ] `/api/games` 返回 12 款
+- [ ] `/api/games` 返回 14 款
 - [ ] 每款游戏 `restart()` 不报错、`onScore` 能触发、`onGameOver` 能触发
 - [ ] 登录→玩→上报分数→`/api/leaderboard/<slug>` 能看到自己
 

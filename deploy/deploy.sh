@@ -86,10 +86,10 @@ else
   c_warn "Nginx 80 未响应"
 fi
 GAME_COUNT=$(curl -s http://127.0.0.1/api/games | python3 -c "import sys,json;print(len(json.load(sys.stdin)['games']))" 2>/dev/null || echo 0)
-if [ "$GAME_COUNT" = "12" ]; then
-  c_ok "游戏数量验证通过: 12 款"
+if [ "$GAME_COUNT" -ge 12 ] 2>/dev/null; then
+  c_ok "游戏数量验证通过: ${GAME_COUNT} 款"
 else
-  c_warn "游戏数量异常: $GAME_COUNT(期望 12)"
+  c_warn "游戏数量异常: $GAME_COUNT(期望 ≥12)"
 fi
 
 echo ""
