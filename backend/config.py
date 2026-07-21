@@ -5,6 +5,7 @@ BACKEND_DIR = os.path.abspath(os.path.dirname(__file__))
 # 项目根 iangame/
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+os.makedirs(DATA_DIR, exist_ok=True)  # 确保 data/ 目录存在(SQLite 父目录缺失会 unable to open database file)
 
 
 class Config:
