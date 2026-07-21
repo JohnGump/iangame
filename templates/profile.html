@@ -36,7 +36,18 @@
 {% block scripts %}
 <script>
 (function () {
-  var games = {{ all_games|tojson }};
+  var games = [
+    {% for g in all_games %}
+    {
+      slug: {{ g.slug|tojson }},
+      name: {{ g.name|tojson }},
+      category: {{ g.category|tojson }},
+      icon: {{ g.icon|tojson }},
+      color: {{ g.color|tojson }},
+      desc: {{ g.desc|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
   var gameMap = {};
   games.forEach(function (g) { gameMap[g.slug] = g; });
   var rows = document.getElementById('rows');
