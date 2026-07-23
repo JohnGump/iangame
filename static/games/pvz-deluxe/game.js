@@ -27,8 +27,8 @@
   var COLS = 9, ROWS = 5;
   var LEVELS = 7;                    // Phase 2 扩展到 7 关
   var WAVES_PER_LEVEL = 5;
-  var HUD_TOP = 88;
-  var FIELD_TOP = 112;
+  var HUD_TOP = 92;
+  var FIELD_TOP = 118;
   var COLOR = {
     bg: '#060912',
     grass1: '#1a3a22', grass2: '#205028', grassDark: '#0f2418',
@@ -542,7 +542,8 @@
   }
 
   // ============================================================
-  // Input
+  // Input · 支持 down/move/up 三阶段 + wheel(商店横向滚动)
+  //   handler(pos, phase, extra)  phase: 'down'|'move'|'up'|'esc', extra: {wheel}
   // ============================================================
   function makeInput(canvas, W, H, handler) {
     function pos(e) {
@@ -552,16 +553,24 @@
       else { cx = e.clientX; cy = e.clientY; }
       return { x: (cx - rect.left) * (W / rect.width), y: (cy - rect.top) * (H / rect.height) };
     }
-    function onDown(e) { e.preventDefault(); handler(pos(e)); }
-    function onMove(e) { handler(pos(e), true); }
-    function onKey(e) { if (e.key === 'Escape') handler(null, false, true); }
+    function onDown(e) { e.preventDefault(); handler(pos(e), 'down'); }
+    function onMove(e) { handler(pos(e), 'move'); }
+    function onUp(e) { handler(pos(e) || { x: -999, y: -999 }, 'up'); }
+    function onWheel(e) { e.preventDefault(); handler(null, 'wheel', { dx: e.deltaX || e.deltaY }); }
+    function onKey(e) { if (e.key === 'Escape') handler(null, 'esc'); }
     canvas.addEventListener('mousedown', onDown);
     canvas.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('touchstart', onDown, { passive: false });
+    canvas.addEventListener('touchmove', function (e) { e.preventDefault(); handler(pos(e), 'move'); }, { passive: false });
+    canvas.addEventListener('touchend', function () { handler({ x: -999, y: -999 }, 'up'); });
     window.addEventListener('keydown', onKey);
     return function destroy() {
       canvas.removeEventListener('mousedown', onDown);
       canvas.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('touchstart', onDown);
       window.removeEventListener('keydown', onKey);
     };
@@ -676,7 +685,18 @@
     }
 
     // ---- 商店 / 放置 ----
-    function shopCardRect(key) { var i = SHOP_KEYS.indexOf(key), w = 74, h = 56, gap = 7, perRow = 4; var r = i % perRow, c = Math.floor(i / perRow); return { x: 10 + r * (w + gap), y: 12 + c * (h + 4), w: w, h: h }; }
+    // 商店:单行 + 横向滚动(放不下时左右滑动)
+    var SHOP_CARD_W = 66, SHOP_CARD_H = 60, SHOP_GAP = 6;
+    var SHOP_AREA_X = 10, SHOP_AREA_Y = 14, SHOP_AREA_W = 340, SHOP_AREA_H = SHOP_CARD_H;
+    var shopScroll = 0, shopDragging = false, shopDragStartX = 0, shopDragStartScroll = 0, shopDragMoved = false;
+    var shopHover = false, downPos = null;
+    function shopTotalWidth() { return SHOP_KEYS.length * (SHOP_CARD_W + SHOP_GAP) - SHOP_GAP; }
+    function shopMaxScroll() { return Math.max(0, shopTotalWidth() - SHOP_AREA_W); }
+    function shopCardRect(key) {
+      var i = SHOP_KEYS.indexOf(key);
+      return { x: SHOP_AREA_X + i * (SHOP_CARD_W + SHOP_GAP) - shopScroll, y: SHOP_AREA_Y, w: SHOP_CARD_W, h: SHOP_CARD_H };
+    }
+    function inShopArea(mx, my) { return mx >= SHOP_AREA_X && mx <= SHOP_AREA_X + SHOP_AREA_W && my >= SHOP_AREA_Y && my <= SHOP_AREA_Y + SHOP_AREA_H; }
     function trySelectShop(key, mx, my) {
       var card = shopCardRect(key);
       if (mx >= card.x && mx <= card.x + card.w && my >= card.y && my <= card.y + card.h) {
@@ -722,17 +742,64 @@
       return false;
     }
 
-    function onHandle(pos, isMove, isEsc) {
-      if (isEsc) { state.selected = null; state.shovelActive = false; return; }
-      if (!pos) return;
-      if (isMove) { state.hoverCell = pickCell(pos.x, pos.y); return; }
-      if (tryShovel(pos.x, pos.y)) return;
-      if (pos.y < HUD_TOP) {
-        for (var i = 0; i < SHOP_KEYS.length; i++) if (trySelectShop(SHOP_KEYS[i], pos.x, pos.y)) return;
+    function onHandle(pos, phase, extra) {
+      // ESC:清选区
+      if (phase === 'esc') { state.selected = null; state.shovelActive = false; return; }
+      // 滚轮:商店区域横向滚动
+      if (phase === 'wheel') {
+        if (shopHover) shopScroll = clamp(shopScroll + (extra.dx > 0 ? 60 : -60), 0, shopMaxScroll());
         return;
       }
-      if (tryCollectSun(pos.x, pos.y)) return;
-      tryPlace(pos.x, pos.y);
+      if (!pos) return;
+
+      // DOWN:记录拖动起点(商店内)
+      if (phase === 'down') {
+        if (inShopArea(pos.x, pos.y)) {
+          shopDragging = true; shopDragMoved = false;
+          shopDragStartX = pos.x; shopDragStartScroll = shopScroll;
+          return;   // 商店内的 down 先不触发选中,等 up 时按"是否拖动"决定
+        }
+        downPos = { x: pos.x, y: pos.y };
+        // 非商店区:立即处理(铲子/收阳光/放植物)
+        if (tryShovel(pos.x, pos.y)) return;
+        if (tryCollectSun(pos.x, pos.y)) return;
+        // 草坪区按下 = 准备放植物(也在 up 时确认,避免和拖动冲突)
+        return;
+      }
+
+      // MOVE:更新 hover + 商店拖动滚动
+      if (phase === 'move') {
+        if (shopHover == null) shopHover = false;
+        shopHover = inShopArea(pos.x, pos.y);
+        if (shopDragging) {
+          var dx = pos.x - shopDragStartX;
+          if (Math.abs(dx) > 4) shopDragMoved = true;
+          shopScroll = clamp(shopDragStartScroll - dx, 0, shopMaxScroll());
+          return;
+        }
+        state.hoverCell = pickCell(pos.x, pos.y);
+        return;
+      }
+
+      // UP:确认操作
+      if (phase === 'up') {
+        // 商店拖动结束:若没真正拖动(只是点击),则尝试选中当前卡片
+        if (shopDragging) {
+          shopDragging = false;
+          if (!shopDragMoved && pos.x >= 0) {
+            for (var i = 0; i < SHOP_KEYS.length; i++) if (trySelectShop(SHOP_KEYS[i], pos.x, pos.y)) break;
+          }
+          return;
+        }
+        // 草坪放置:up 时确认(避免拖动误放)
+        if (pos.x >= 0 && pos.y >= HUD_TOP) {
+          if (tryShovel(pos.x, pos.y)) return;
+          if (tryCollectSun(pos.x, pos.y)) return;
+          tryPlace(pos.x, pos.y);
+        }
+        downPos = null;
+        return;
+      }
     }
 
     // ============================================================
@@ -1231,7 +1298,11 @@
       ctx.strokeStyle = 'rgba(124,58,237,0.3)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, HUD_TOP); ctx.lineTo(W, HUD_TOP); ctx.stroke();
 
-      // 商店卡片(8 张,2 行)
+      // 商店容器背景 + 滚动裁剪区(单行,放不下横向滑动)
+      ctx.fillStyle = 'rgba(13,19,32,0.6)';
+      roundRectPath(ctx, SHOP_AREA_X - 4, SHOP_AREA_Y - 4, SHOP_AREA_W + 8, SHOP_AREA_H + 8, 10); ctx.fill();
+      ctx.save();
+      ctx.beginPath(); ctx.rect(SHOP_AREA_X, SHOP_AREA_Y, SHOP_AREA_W, SHOP_AREA_H); ctx.clip();
       for (var i = 0; i < SHOP_KEYS.length; i++) {
         var key = SHOP_KEYS[i];
         var def = PLANTS[key];
@@ -1259,9 +1330,24 @@
         ctx.fillStyle = affordable ? COLOR.sun : COLOR.text2;
         ctx.fillText(def.cost, r.x + r.w / 2, r.y + r.h - 8);
       }
+      ctx.restore();
+      // 滚动条指示(仅当内容溢出)
+      if (shopMaxScroll() > 0) {
+        var trackW = SHOP_AREA_W - 20, tbX = SHOP_AREA_X + 10, tbY = SHOP_AREA_Y + SHOP_AREA_H + 4;
+        ctx.fillStyle = 'rgba(255,255,255,0.1)'; roundRectPath(ctx, tbX, tbY, trackW, 3, 1.5); ctx.fill();
+        var thumbW = Math.max(20, trackW * SHOP_AREA_W / shopTotalWidth());
+        var thumbX = tbX + (trackW - thumbW) * (shopScroll / shopMaxScroll());
+        ctx.fillStyle = 'rgba(0,224,255,0.6)'; roundRectPath(ctx, thumbX, tbY, thumbW, 3, 1.5); ctx.fill();
+      }
+      // 拖动提示(hover 商店且可滚动时)
+      if (shopHover && shopMaxScroll() > 0) {
+        ctx.font = '10px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillStyle = 'rgba(139,151,179,0.7)';
+        ctx.fillText('← 拖动 / 滚轮浏览 →', SHOP_AREA_X + SHOP_AREA_W / 2, SHOP_AREA_Y + SHOP_AREA_H + 10);
+      }
 
       // 阳光面板(商店右侧)
-      var sx = 10 + 4 * (74 + 7) + 6, sy = 12, sw = 88, sh = 44;
+      var sx = SHOP_AREA_X + SHOP_AREA_W + 10, sy = 14, sw = 92, sh = SHOP_CARD_H;
       ctx.fillStyle = 'rgba(13,19,32,0.9)'; roundRectPath(ctx, sx, sy, sw, sh, 10); ctx.fill();
       ctx.strokeStyle = 'rgba(255,216,77,0.4)'; ctx.lineWidth = 1; roundRectPath(ctx, sx, sy, sw, sh, 10); ctx.stroke();
       drawSun(ctx, { x: sx + 22, y: sy + sh / 2, phase: 0 }, state.time);
