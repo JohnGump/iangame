@@ -25,7 +25,7 @@
   // 配置常量
   // ============================================================
   var COLS = 9, ROWS = 5;
-  var LEVELS = 7;                    // Phase 2 扩展到 7 关
+  var LEVELS = 12;                   // Phase 3 扩展到 12 关
   var WAVES_PER_LEVEL = 5;
   var HUD_TOP = 92;
   var FIELD_TOP = 118;
@@ -40,8 +40,8 @@
   };
 
   // ============================================================
-  // 植物定义(Phase 2: 8 种)
-  //   kind:  sun 产阳光 / shoot 射击 / wall 肉盾 / bomb 爆炸 / eat 吞噬 / spike 地刺 / aura 光环
+  // 植物定义(Phase 3: 12 种)
+  //   kind:  sun 产阳光 / shoot 射击 / wall 肉盾 / bomb 爆炸 / eat 吞噬 / spike 地刺
   //   element: ice/fire/poison/electric(仅 shoot 类带元素,触发元素反应)
   // ============================================================
   var PLANTS = {
@@ -52,14 +52,20 @@
     firepea:    { name: '火焰射手', cost: 175, hp: 4,  recharge: 7.5,  fire: 1.4, dmg: 1.2, kind: 'shoot', element: 'fire' },
     'toxic-shoot':{ name: '毒液菇', cost: 150, hp: 4,  recharge: 8,    fire: 1.6, dmg: 0.8, kind: 'shoot', element: 'poison' },
     electric:   { name: '闪电芦苇', cost: 225, hp: 4,  recharge: 9,    fire: 1.8, dmg: 1,   kind: 'shoot', element: 'electric' },
-    cherrybomb: { name: '樱桃炸弹', cost: 150, hp: 1,  recharge: 30,   kind: 'bomb', fuse: 1.2, radius: 130, dmg: 25 }
+    cherrybomb: { name: '樱桃炸弹', cost: 150, hp: 1,  recharge: 30,   kind: 'bomb', fuse: 1.2, radius: 130, dmg: 25 },
+    // Phase 3 新增 4 种
+    twinpea:    { name: '双发射手', cost: 200, hp: 4,  recharge: 8,    fire: 1.4, dmg: 1, kind: 'shoot', twin: true },
+    chomper:    { name: '食人花', cost: 150, hp: 4, recharge: 12, kind: 'eat', chew: 10, range: 70, dmg: 10 },
+    spikerock:  { name: '地刺', cost: 100, hp: 6, recharge: 15, kind: 'spike', dmg: 0.5, slow: 0.6 },
+    jalapeno:   { name: '火爆辣椒', cost: 125, hp: 1, recharge: 28, kind: 'bomb', fuse: 1.0, rowBomb: true, dmg: 25 }
   };
-  var SHOP_KEYS = ['sunflower', 'peashooter', 'wallnut', 'snowpea', 'firepea', 'toxic-shoot', 'electric', 'cherrybomb'];
+  var SHOP_KEYS = ['sunflower', 'peashooter', 'wallnut', 'snowpea', 'firepea', 'toxic-shoot', 'electric', 'cherrybomb', 'twinpea', 'chomper', 'spikerock', 'jalapeno'];
 
   // ============================================================
-  // 僵尸定义(Phase 2: 8 种 + Boss)
-  //   special 特殊行为: pole 撑杆冲刺 / balloon 气球飞行 / newspaper 读报激怒 /
-  //                     sled 雪橇加速 / cone hat 路障 / bucket hat 铁桶
+  // 僵尸定义(Phase 3: 12 种 + Boss)
+  //   special: pole 撑杆冲刺 / balloon 气球飞行 / newspaper 读报激怒 /
+  //            sled 雪橇加速 / jump 跳过 / screen 铁栅门正面减伤 /
+  //            football 高速高血 / dancer 召唤伴舞 / miner 绕后
   // ============================================================
   var ZOMBIES = {
     normal:    { name: '普通僵尸', hp: 3,   sp: 0.22, atk: 0.5, score: 10,  tint: '#7a8a55' },
@@ -70,6 +76,11 @@
     newspaper: { name: '读报僵尸', hp: 4,   sp: 0.18, atk: 0.5, score: 25,  tint: '#5a6a5a', special: 'newspaper' },
     sled:      { name: '雪橇僵尸', hp: 7,   sp: 0.18, atk: 0.6, score: 35,  tint: '#5a7a8a', special: 'sled' },
     jump:      { name: '跳跳僵尸', hp: 5,   sp: 0.24, atk: 0.5, score: 30,  tint: '#7a6a3a', special: 'jump' },
+    // Phase 3 新增 4 种
+    screen:    { name: '铁栅门僵尸', hp: 14,  sp: 0.18, atk: 0.6, score: 45,  tint: '#4a5a4a', special: 'screen' },
+    football:  { name: '橄榄球僵尸', hp: 10,  sp: 0.34, atk: 0.7, score: 50,  tint: '#5a4a3a', special: 'football' },
+    dancer:    { name: '舞王僵尸', hp: 8,   sp: 0.16, atk: 0.5, score: 40,  tint: '#6a3a5a', special: 'dancer' },
+    miner:     { name: '矿工僵尸', hp: 6,   sp: 0.22, atk: 0.5, score: 35,  tint: '#4a4a3a', special: 'miner' },
     boss:      { name: '僵尸博士', hp: 120, sp: 0.12, atk: 2.0, score: 500, tint: '#3a2a5a', special: 'boss', isBoss: true }
   };
 
@@ -271,6 +282,111 @@
     else if (type === 'toxic-shoot') drawToxicShoot(ctx, x, y, size, t, hurt, extra.attack);
     else if (type === 'electric') drawElectric(ctx, x, y, size, t, hurt, extra.attack);
     else if (type === 'cherrybomb') drawCherrybomb(ctx, x, y, size, t, hurt, extra.fuse != null ? extra.fuse : 1);
+    else if (type === 'twinpea') drawTwinpea(ctx, x, y, size, t, hurt, extra.attack);
+    else if (type === 'chomper') drawChomper(ctx, x, y, size, t, hurt, extra.attack);
+    else if (type === 'spikerock') drawSpikerock(ctx, x, y, size, t, hurt);
+    else if (type === 'jalapeno') drawJalapeno(ctx, x, y, size, t, hurt, extra.fuse != null ? extra.fuse : 1);
+  }
+
+  // 双发射手:两个头部并排
+  function drawTwinpea(ctx, x, y, size, t, hurt, attack) {
+    ctx.strokeStyle = '#3da935'; ctx.lineWidth = size * 0.10; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y + size * 0.5); ctx.quadraticCurveTo(x, y, x, y - size * 0.05); ctx.stroke();
+    ctx.fillStyle = '#4cc041';
+    ctx.beginPath(); ctx.ellipse(x - size * 0.28, y + size * 0.25, size * 0.16, size * 0.08, -0.5, 0, Math.PI * 2); ctx.fill();
+    // 左右两个头
+    for (var s = -1; s <= 1; s += 2) {
+      var hx = x + s * size * 0.14, hy = y - size * 0.10;
+      var grd = ctx.createRadialGradient(hx - size * 0.06, hy - size * 0.06, 0, hx, hy, size * 0.20);
+      grd.addColorStop(0, '#7ee06a'); grd.addColorStop(1, '#2e9b3a');
+      ctx.fillStyle = grd;
+      ctx.beginPath(); ctx.arc(hx, hy, size * 0.18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1f7a2a';
+      ctx.beginPath(); ctx.ellipse(hx + size * 0.16, hy, size * 0.07, attack ? size * 0.08 : size * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hx - size * 0.02, hy - size * 0.04, size * 0.035, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(hx, hy - size * 0.04, size * 0.018, 0, Math.PI * 2); ctx.fill();
+    }
+    if (hurt) { ctx.fillStyle = 'rgba(255,80,80,0.4)'; ctx.beginPath(); ctx.arc(x, y - size * 0.10, size * 0.35, 0, Math.PI * 2); ctx.fill(); }
+  }
+
+  // 食人花:大嘴 + 紫色
+  function drawChomper(ctx, x, y, size, t, hurt, attack) {
+    ctx.strokeStyle = '#3da935'; ctx.lineWidth = size * 0.10; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y + size * 0.5); ctx.quadraticCurveTo(x, y, x, y - size * 0.05); ctx.stroke();
+    ctx.fillStyle = '#4cc041';
+    ctx.beginPath(); ctx.ellipse(x - size * 0.28, y + size * 0.28, size * 0.18, size * 0.09, -0.5, 0, Math.PI * 2); ctx.fill();
+    // 头(大椭圆)
+    var hx = x + size * 0.08, hy = y - size * 0.15;
+    var grd = ctx.createRadialGradient(hx - size * 0.08, hy - size * 0.08, 0, hx, hy, size * 0.30);
+    grd.addColorStop(0, '#c060d0'); grd.addColorStop(1, '#5a1a6a');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.ellipse(hx, hy, size * 0.28, size * 0.20, 0, 0, Math.PI * 2); ctx.fill();
+    // 嘴(攻击时张开)
+    var mouthOpen = attack ? size * 0.14 : size * 0.06;
+    ctx.fillStyle = '#1a0a1a';
+    ctx.beginPath(); ctx.ellipse(hx + size * 0.18, hy, size * 0.14, mouthOpen, 0, 0, Math.PI * 2); ctx.fill();
+    // 牙齿
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(hx + size * 0.10, hy - mouthOpen + 1, size * 0.03, size * 0.04);
+    ctx.fillRect(hx + size * 0.18, hy - mouthOpen + 1, size * 0.03, size * 0.04);
+    ctx.fillRect(hx + size * 0.26, hy - mouthOpen + 1, size * 0.03, size * 0.04);
+    // 眼
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hx - size * 0.04, hy - size * 0.08, size * 0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(hx - size * 0.03, hy - size * 0.08, size * 0.02, 0, Math.PI * 2); ctx.fill();
+    if (hurt) { ctx.fillStyle = 'rgba(255,80,80,0.4)'; ctx.beginPath(); ctx.ellipse(hx, hy, size * 0.32, size * 0.22, 0, 0, Math.PI * 2); ctx.fill(); }
+  }
+
+  // 地刺:贴地的尖刺
+  function drawSpikerock(ctx, x, y, size, t, hurt) {
+    // 底座
+    ctx.fillStyle = '#5a4a3a';
+    ctx.beginPath(); ctx.ellipse(x, y + size * 0.18, size * 0.36, size * 0.10, 0, 0, Math.PI * 2); ctx.fill();
+    // 尖刺(3 根,带辉光)
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(180,180,200,0.4)'; ctx.lineWidth = size * 0.08; ctx.lineCap = 'round';
+    for (var i = -1; i <= 1; i++) {
+      var sx = x + i * size * 0.18;
+      ctx.beginPath(); ctx.moveTo(sx, y + size * 0.10); ctx.lineTo(sx, y - size * 0.22); ctx.stroke();
+    }
+    ctx.restore();
+    // 尖刺主体
+    ctx.fillStyle = '#9a9aaa';
+    for (var j = -1; j <= 1; j++) {
+      var sx2 = x + j * size * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(sx2 - size * 0.05, y + size * 0.10);
+      ctx.lineTo(sx2 + size * 0.05, y + size * 0.10);
+      ctx.lineTo(sx2, y - size * 0.22);
+      ctx.closePath(); ctx.fill();
+    }
+    if (hurt) { ctx.fillStyle = 'rgba(255,80,80,0.4)'; ctx.fillRect(x - size * 0.3, y, size * 0.6, size * 0.2); }
+  }
+
+  // 火爆辣椒:红长条 + 怒容 + 危险光晕
+  function drawJalapeno(ctx, x, y, size, t, hurt, fuse) {
+    var pulse = 1 + Math.sin(t * (fuse < 0.5 ? 20 : 8)) * 0.06;
+    var grd = ctx.createLinearGradient(x, y - size * 0.3, x, y + size * 0.3);
+    grd.addColorStop(0, '#ff5040'); grd.addColorStop(1, '#a01010');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.ellipse(x, y, size * 0.16 * pulse, size * 0.42 * pulse, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 高光
+    ctx.fillStyle = 'rgba(255,200,200,0.5)';
+    ctx.beginPath(); ctx.ellipse(x - size * 0.05, y - size * 0.10, size * 0.04, size * 0.20, 0, 0, Math.PI * 2); ctx.fill();
+    // 蒂
+    ctx.strokeStyle = '#3a5a2a'; ctx.lineWidth = size * 0.04; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y - size * 0.40); ctx.lineTo(x + size * 0.06, y - size * 0.30); ctx.stroke();
+    // 怒眼
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y - size * 0.12, size * 0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y - size * 0.12, size * 0.02, 0, Math.PI * 2); ctx.fill();
+    // 危险光晕
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    var dg = ctx.createRadialGradient(x, y, 0, x, y, size * 0.5);
+    dg.addColorStop(0, withAlpha(COLOR.fire, 0.3 + (1 - fuse) * 0.3)); dg.addColorStop(1, withAlpha(COLOR.fire, 0));
+    ctx.fillStyle = dg;
+    ctx.beginPath(); ctx.arc(x, y, size * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   // ============================================================
@@ -369,6 +485,47 @@
       ctx.beginPath();
       ctx.moveTo(x - size * 0.20, cy + size * 0.40); ctx.quadraticCurveTo(x, cy + size * 0.46, x + size * 0.20, cy + size * 0.40);
       ctx.stroke();
+    } else if (def.special === 'screen' && !z.angered) {
+      // 铁栅门(手持挡在前)
+      var sg = ctx.createLinearGradient(x + size * 0.20, cy, x + size * 0.40, cy);
+      sg.addColorStop(0, '#9aa6b4'); sg.addColorStop(1, '#4a5664');
+      ctx.fillStyle = sg;
+      roundRectPath(ctx, x + size * 0.22, cy - size * 0.18, size * 0.16, size * 0.40, size * 0.02); ctx.fill();
+      ctx.strokeStyle = '#2a3640'; ctx.lineWidth = 1;
+      for (var bi = 0; bi < 4; bi++) {
+        ctx.beginPath(); ctx.moveTo(x + size * 0.24, cy - size * 0.14 + bi * size * 0.10); ctx.lineTo(x + size * 0.36, cy - size * 0.14 + bi * size * 0.10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + size * 0.30, cy - size * 0.16 + bi * size * 0.10); ctx.lineTo(x + size * 0.30, cy - size * 0.06 + bi * size * 0.10); ctx.stroke();
+      }
+    } else if (def.special === 'football') {
+      // 橄榄球头盔
+      var fh = ctx.createRadialGradient(x - size * 0.04, cy - size * 0.30, 0, x, cy - size * 0.26, size * 0.22);
+      fh.addColorStop(0, '#d8a050'); fh.addColorStop(1, '#6a3a10');
+      ctx.fillStyle = fh;
+      ctx.beginPath(); ctx.ellipse(x, cy - size * 0.26, size * 0.22, size * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      // 面罩
+      ctx.strokeStyle = '#5a3a10'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - size * 0.18, cy - size * 0.24); ctx.lineTo(x + size * 0.18, cy - size * 0.24); ctx.stroke();
+    } else if (def.special === 'dancer') {
+      // 舞王披风(红色)
+      ctx.fillStyle = '#7a1a3a';
+      ctx.beginPath();
+      ctx.moveTo(x - size * 0.16, cy - size * 0.08); ctx.lineTo(x - size * 0.28, cy + size * 0.30); ctx.lineTo(x + size * 0.16, cy + size * 0.30); ctx.lineTo(x + size * 0.16, cy - size * 0.08);
+      ctx.closePath(); ctx.fill();
+      // 闪亮手套
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x + size * 0.24, cy + size * 0.04 + Math.sin(z.walkPhase) * size * 0.03, size * 0.04, 0, Math.PI * 2); ctx.fill();
+    } else if (def.special === 'miner') {
+      // 矿工头盔 + 灯
+      ctx.fillStyle = '#d8a030';
+      roundRectPath(ctx, x - size * 0.16, cy - size * 0.42, size * 0.32, size * 0.12, size * 0.03); ctx.fill();
+      ctx.fillStyle = '#ffe066';   // 矿灯
+      ctx.beginPath(); ctx.arc(x, cy - size * 0.40, size * 0.04, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      var lg = ctx.createRadialGradient(x, cy - size * 0.40, 0, x, cy - size * 0.40, size * 0.20);
+      lg.addColorStop(0, 'rgba(255,224,102,0.5)'); lg.addColorStop(1, 'rgba(255,224,102,0)');
+      ctx.fillStyle = lg;
+      ctx.beginPath(); ctx.arc(x, cy - size * 0.40, size * 0.20, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
     // Boss 特殊绘制(巨型 + 护盾 + 机械臂)
     if (def.isBoss) {
@@ -643,7 +800,8 @@
       toasts: [], shake: 0,
       skyTimer: rand(6, 10),
       levelStartFlash: 0, waveBanner: 0, waveBannerText: '',
-      bossActive: false, bossDef: null
+      bossActive: false, bossDef: null,
+      autoSun: false           // 自动收取阳光手动开关(默认关)
     };
 
     var audio = makeAudio();
@@ -730,6 +888,17 @@
       audio.plant();
       return true;
     }
+    // 自动收阳光按钮(铲子左侧)
+    function autoSunBtnRect() { return { x: W - 94, y: 16, w: 38, h: 38 }; }
+    function tryAutoSun(mx, my) {
+      var r = autoSunBtnRect();
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        state.autoSun = !state.autoSun;
+        toast(state.autoSun ? '自动收取阳光:开' : '自动收取阳光:关', state.autoSun ? 'ok' : 'warn');
+        return true;
+      }
+      return false;
+    }
     function tryShovel(mx, my) {
       var sx = W - 50, sy = 16;
       if (mx >= sx && mx <= sx + 38 && my >= sy && my <= sy + 38) { state.shovelActive = !state.shovelActive; return true; }
@@ -758,11 +927,13 @@
       // 点击(仅处理 down 即可,up 不重复;触屏 touchstart=down 已覆盖)
       if (phase === 'down') {
         if (pos.y < HUD_TOP) {
-          // 顶部 HUD 区:商店卡片优先,再铲子
+          // 顶部 HUD 区:商店卡片优先,再功能按钮
           for (var i = 0; i < SHOP_KEYS.length; i++) if (trySelectShop(SHOP_KEYS[i], pos.x, pos.y)) return;
+          if (tryAutoSun(pos.x, pos.y)) return;
           if (tryShovel(pos.x, pos.y)) return;
           return;
         }
+        if (tryAutoSun(pos.x, pos.y)) return;
         if (tryShovel(pos.x, pos.y)) return;
         if (tryCollectSun(pos.x, pos.y)) return;
         tryPlace(pos.x, pos.y);
@@ -861,27 +1032,32 @@
       state.wave++;
       if (state.wave > WAVES_PER_LEVEL) { nextLevel(); return; }
       var count = 3 + state.wave + state.level;
-      // Boss 关(第 4 关第 3 波出 Boss)
-      var isBossWave = (state.level === 4 && state.wave === 3);
+      // Boss 关:第 4 / 8 / 12 关的最后一波出 Boss(Boss hp 逐次翻倍)
+      var isBossLevel = (state.level === 4 || state.level === 8 || state.level === 12);
+      var isBossWave = isBossLevel && state.wave === WAVES_PER_LEVEL;
       state.zombiesToSpawn = count;
       state.spawnQueue = [];
-      // 出怪池随关卡解锁更多种类
+      // 出怪池随关卡递进解锁更多种类
       var pool = ['normal'];
       if (state.level >= 1) pool.push('cone');
       if (state.level >= 2) pool.push('bucket', 'pole');
       if (state.level >= 3) pool.push('balloon', 'newspaper');
       if (state.level >= 4) pool.push('sled', 'jump');
+      if (state.level >= 6) pool.push('screen', 'football');
+      if (state.level >= 8) pool.push('miner');
+      if (state.level >= 10) pool.push('dancer');
       for (var i = 0; i < count; i++) state.spawnQueue.push(pool[Math.floor(Math.random() * pool.length)]);
       state.spawnTimer = 1.0;
       state.waveBanner = 1.6;
       state.waveBannerText = '第 ' + state.level + ' 章 · 第 ' + state.wave + ' / ' + WAVES_PER_LEVEL + ' 波';
       toast(state.waveBannerText);
       if (isBossWave) {
-        // 最后追加 Boss
+        // Boss 放最后,且 hp 随次数提升(第4关=1x,第8关=1.6x,第12关=2.4x)
         state.spawnQueue.push('boss');
         state.zombiesToSpawn++;
+        state.bossScale = state.level === 4 ? 1 : (state.level === 8 ? 1.6 : 2.4);
         setTimeout(function () {
-          state.waveBannerText = '⚠ 僵尸博士出现!';
+          state.waveBannerText = '⚠ 僵尸博士出现!(' + (state.bossScale === 1 ? '初代' : state.bossScale === 1.6 ? '强化' : '究极') + ')';
           state.waveBanner = 1.6;
           audio.boss();
           toast('⚠ Boss · 僵尸博士!', 'warn');
@@ -908,12 +1084,17 @@
       var def = ZOMBIES[type];
       var row = Math.floor(Math.random() * ROWS);
       var c = cellCenter(COLS, row);
+      // Boss 按 bossScale 强化血量/攻击
+      var scale = def.isBoss ? (state.bossScale || 1) : 1;
+      var hp = Math.round(def.hp * scale);
       var z = {
         type: type, x: c.x + (def.isBoss ? 20 : 40), y: c.y, row: row,
-        hp: def.hp, maxHp: def.hp, def: def,
+        hp: hp, maxHp: hp, def: def,
         walkPhase: Math.random() * 6, hurt: 0, eating: false, eatTimer: 0,
         ice: 0, fire: 0, poison: 0, frozen: 0, slow: 0, poisonTimer: 0,
-        usedPole: false, angered: false, shield: def.isBoss ? 4 : 0, shieldTimer: def.isBoss ? 6 : 0
+        usedPole: false, angered: false, usedJump: false, jumpAnim: 0,
+        shield: def.isBoss ? 4 : 0, shieldTimer: def.isBoss ? 6 : 0,
+        spawnTimer: 0, summoned: false
       };
       state.zombies.push(z);
       if (def.isBoss) { state.bossActive = true; state.bossDef = z; state.shake = 0.8; }
@@ -948,7 +1129,16 @@
         if (s.fromSky) { if (s.y < s.ty) s.y += 60 * dt * 4; else s.y = s.ty; }
         else { s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 200 * dt; if (s.y > s.ty + 20) { s.y = s.ty + 20; s.vy = 0; } }
         s.life -= dt;
-        if (s.life <= 0) state.suns.splice(i, 1);
+        if (s.life <= 0) { state.suns.splice(i, 1); continue; }
+        // 自动收取:阳光落地(或接近落地)后自动收集
+        if (state.autoSun) {
+          var settled = s.fromSky ? s.y >= s.ty : s.vy >= 0 && s.y >= s.ty;
+          if (settled) {
+            state.sun += 25;
+            state.particles.spawn(s.x, s.y, { n: 8, color: COLOR.sun, life: 0.4, sizeMin: 2, sizeMax: 3 });
+            state.suns.splice(i, 1);
+          }
+        }
       }
 
       // 植物逻辑
@@ -966,11 +1156,10 @@
         } else if (def.kind === 'shoot') {
           p.fireTimer -= dt;
           var rateMul2 = getFireRateMultiplier(p);
+          // 检查同行前方有僵尸
           var hasZ = false;
           for (var j = 0; j < state.zombies.length; j++) {
-            var ztest = state.zombies[j];
-            if (ztest.row === p.row && ztest.x > p.x && !(def.element === undefined)) { hasZ = true; break; }
-            if (ztest.row === p.row && ztest.x > p.x) { hasZ = true; break; }
+            if (state.zombies[j].row === p.row && state.zombies[j].x > p.x) { hasZ = true; break; }
           }
           if (hasZ && p.fireTimer <= 0) {
             var bColor = '#7cff7c';
@@ -978,23 +1167,56 @@
             else if (def.element === 'fire') bColor = COLOR.fire;
             else if (def.element === 'poison') bColor = COLOR.poison;
             else if (def.element === 'electric') bColor = COLOR.electric;
+            // 双发射手同时发两颗(微错位)
             state.bullets.push({ x: p.x + 18, y: p.y - 6, vx: 380, dmg: def.dmg, row: p.row, life: 3, element: def.element, color: bColor });
+            if (def.twin) state.bullets.push({ x: p.x + 18, y: p.y - 2, vx: 380, dmg: def.dmg, row: p.row, life: 3, element: def.element, color: bColor });
             p.fireTimer = def.fire / rateMul2; p.attack = 0.2;
             audio.shoot();
           }
         } else if (def.kind === 'bomb') {
           p.fuse -= dt;
           if (p.fuse <= 0) {
-            // 爆炸:范围伤害
             audio.bomb(); state.shake = 0.7;
-            state.effects.push({ kind: 'ring', x: p.x, y: p.y, r: 10, max: def.radius, life: 0.5, max0: 0.5, color: COLOR.fire });
             state.particles.spawn(p.x, p.y, { n: 30, color: COLOR.fire, life: 0.8, sizeMin: 3, sizeMax: 7 });
             state.particles.spawn(p.x, p.y, { n: 16, color: '#ffff00', life: 0.6, glow: true });
-            for (var m = 0; m < state.zombies.length; m++) {
-              var oz = state.zombies[m];
-              if (dist2(oz.x, oz.y, p.x, p.y) < def.radius * def.radius) { oz.hp -= def.dmg; oz.hurt = 0.3; }
+            if (def.rowBomb) {
+              // 火爆辣椒:整行清屏(横向条带特效)
+              for (var m = 0; m < state.zombies.length; m++) {
+                var oz = state.zombies[m];
+                if (oz.row === p.row) { oz.hp -= def.dmg; oz.hurt = 0.3; }
+              }
+              state.effects.push({ kind: 'rowbeam', y: p.y, life: 0.6, max0: 0.6, color: COLOR.fire });
+            } else {
+              // 樱桃炸弹:范围圆伤
+              state.effects.push({ kind: 'ring', x: p.x, y: p.y, r: 10, max: def.radius, life: 0.5, max0: 0.5, color: COLOR.fire });
+              for (var m = 0; m < state.zombies.length; m++) {
+                var oz = state.zombies[m];
+                if (dist2(oz.x, oz.y, p.x, p.y) < def.radius * def.radius) { oz.hp -= def.dmg; oz.hurt = 0.3; }
+              }
             }
             p.hp = 0;
+          }
+        } else if (def.kind === 'eat') {
+          // 食人花:吞噬前方近距离僵尸,然后咀嚼冷却
+          p.chewTimer = (p.chewTimer || 0) - dt;
+          if (p.chewTimer <= 0) {
+            for (var j = 0; j < state.zombies.length; j++) {
+              var zt = state.zombies[j];
+              if (zt.row === p.row && zt.x > p.x && zt.x - p.x < def.range) {
+                zt.hp -= def.dmg; zt.hurt = 0.3; p.attack = 0.4; p.chewTimer = def.chew;
+                state.particles.spawn(zt.x, zt.y - 20, { n: 12, color: '#aa3a5a', life: 0.5 });
+                audio.zombieHit();
+                break;
+              }
+            }
+          }
+        } else if (def.kind === 'spike') {
+          // 地刺:对踩到它同格的僵尸持续伤害 + 减速
+          for (var j = 0; j < state.zombies.length; j++) {
+            var zs = state.zombies[j];
+            if (zs.row === p.row && Math.abs(zs.x - p.x) < COL_W * 0.6) {
+              zs.hp -= def.dmg * dt; zs.slow = Math.max(zs.slow, def.slow);
+            }
           }
         }
         if (p.hp <= 0) {
@@ -1010,11 +1232,11 @@
         if (b.x > W + 20 || b.life <= 0) { state.bullets.splice(i, 1); continue; }
         for (var j = 0; j < state.zombies.length; j++) {
           var z = state.zombies[j];
-          // 气球僵尸只能被对空攻击命中(此处简化:所有射击都能打,但 balloon 有闪避概率)
           if (z.row === b.row && Math.abs(z.x - b.x) < 22 && z.hp > 0) {
-            z.hp -= b.dmg; z.hurt = 0.15;
+            // 铁栅门僵尸正面减伤 60%(手持铁门挡在身前)
+            var dmgMul = (z.def.special === 'screen' && !z.angered) ? 0.4 : 1;
+            z.hp -= b.dmg * dmgMul; z.hurt = 0.15;
             state.particles.spawn(b.x, b.y, { n: 5, color: b.color, life: 0.3, sizeMin: 1, sizeMax: 3 });
-            // 元素应用
             if (b.element) applyElement(z, b.element, b.dmg);
             state.bullets.splice(i, 1);
             audio.hit();
@@ -1049,7 +1271,37 @@
         else if (z.slow > 0) speedMul = 0.4;
         if (z.def.special === 'pole' && !z.usedPole && z.x > FIELD_LEFT + FIELD_W - 200) { speedMul *= 2.2; if (z.x < FIELD_LEFT + FIELD_W - 250) z.usedPole = true; }
         if (z.def.special === 'sled') speedMul *= 1.3;
+        if (z.def.special === 'football') speedMul *= 1.4;   // 橄榄球僵尸高速
+        if (z.def.special === 'miner' && !z.tunneled) {
+          // 矿工:入场直接钻到左侧(绕后),钻地期间无敌且不显示碰撞
+          z.tunneled = true; z.x = FIELD_LEFT + COL_W * 0.5;
+          state.particles.spawn(z.x, z.y, { n: 14, color: '#8a6a3a', life: 0.6 });
+          toast('矿工僵尸从后方钻出!');
+        }
         if (z.angered) speedMul *= 1.6;
+        // 舞王僵尸:周期性召唤伴舞(2 个普通僵尸)
+        if (z.def.special === 'dancer' && !z.summoned && z.hp < z.maxHp * 0.8) {
+          z.summoned = true; z.summonTimer = 6;
+          toast('舞王召唤了伴舞!');
+        }
+        if (z.summonTimer > 0) {
+          z.summonTimer -= dt;
+          if (z.summonTimer <= 0 && z.hp > 0) {
+            // 召唤 2 个普通僵尸在自己附近
+            for (var si = 0; si < 2; si++) {
+              var nr = clamp(z.row + (si === 0 ? -1 : 1), 0, ROWS - 1);
+              var nc = cellCenter(COLS, nr);
+              state.zombies.push({
+                type: 'normal', x: z.x + 20, y: nc.y, row: nr, hp: 3, maxHp: 3, def: ZOMBIES.normal,
+                walkPhase: Math.random() * 6, hurt: 0, eating: false, eatTimer: 0,
+                ice: 0, fire: 0, poison: 0, frozen: 0, slow: 0, poisonTimer: 0,
+                usedPole: false, angered: false, usedJump: false, jumpAnim: 0,
+                shield: 0, shieldTimer: 0, spawnTimer: 0, summoned: false
+              });
+            }
+            z.summonTimer = 8;   // 周期再召
+          }
+        }
 
         // 查前方植物
         var target = null;
@@ -1218,17 +1470,27 @@
     function drawBullets() { for (var i = 0; i < state.bullets.length; i++) drawPea(ctx, state.bullets[i]); }
     function drawSuns() { for (var i = 0; i < state.suns.length; i++) drawSun(ctx, state.suns[i], state.time); }
     function drawEffectsBelow() {
-      // 范围环(在实体下方)
       for (var i = 0; i < state.effects.length; i++) {
         var ef = state.effects[i];
-        if (ef.kind !== 'ring') continue;
-        var alpha = clamp(ef.life / ef.max0, 0, 1);
-        ctx.save(); ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = withAlpha(ef.color, alpha * 0.8); ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = withAlpha(ef.color, alpha * 0.15);
-        ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
+        if (ef.kind === 'ring') {
+          // 范围环
+          var alpha = clamp(ef.life / ef.max0, 0, 1);
+          ctx.save(); ctx.globalCompositeOperation = 'lighter';
+          ctx.strokeStyle = withAlpha(ef.color, alpha * 0.8); ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = withAlpha(ef.color, alpha * 0.15);
+          ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        } else if (ef.kind === 'rowbeam') {
+          // 火爆辣椒:整行横向火带
+          var alpha2 = clamp(ef.life / ef.max0, 0, 1);
+          ctx.save(); ctx.globalCompositeOperation = 'lighter';
+          var bg = ctx.createLinearGradient(0, ef.y - 30, 0, ef.y + 30);
+          bg.addColorStop(0, 'rgba(255,120,71,0)'); bg.addColorStop(0.5, withAlpha(COLOR.fire, alpha2 * 0.6)); bg.addColorStop(1, 'rgba(255,120,71,0)');
+          ctx.fillStyle = bg;
+          ctx.fillRect(0, ef.y - 30, W, 60);
+          ctx.restore();
+        }
       }
     }
     function drawEffectsAbove() {
@@ -1314,6 +1576,23 @@
       ctx.fillStyle = 'rgba(0,0,0,0.4)'; roundRectPath(ctx, px, py, pw, 6, 3); ctx.fill();
       var prog = (state.wave - 1 + (1 - state.zombies.length / Math.max(1, state.zombiesToSpawn + state.zombies.length))) / WAVES_PER_LEVEL;
       ctx.fillStyle = COLOR.neon2; roundRectPath(ctx, px, py, pw * clamp(prog, 0, 1), 6, 3); ctx.fill();
+
+      // 自动收阳光开关按钮(铲子左侧)
+      var ar = autoSunBtnRect();
+      ctx.fillStyle = state.autoSun ? 'rgba(255,216,77,0.3)' : 'rgba(20,27,46,0.9)';
+      roundRectPath(ctx, ar.x, ar.y, ar.w, ar.h, 8); ctx.fill();
+      ctx.strokeStyle = state.autoSun ? COLOR.sun : 'rgba(124,58,237,0.4)'; ctx.lineWidth = state.autoSun ? 2 : 1;
+      roundRectPath(ctx, ar.x, ar.y, ar.w, ar.h, 8); ctx.stroke();
+      ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = state.autoSun ? COLOR.sun : COLOR.text2;
+      ctx.fillText('☀', ar.x + ar.w / 2, ar.y + ar.h / 2);
+      // 开关状态小圆点
+      ctx.fillStyle = state.autoSun ? COLOR.ok : COLOR.text3;
+      ctx.beginPath(); ctx.arc(ar.x + ar.w - 5, ar.y + 5, 3, 0, Math.PI * 2); ctx.fill();
+      // 悬停提示
+      ctx.font = '10px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillStyle = COLOR.text2;
+      ctx.fillText('自动', ar.x + ar.w / 2, ar.y + ar.h + 2);
 
       // 铲子按钮
       var shX = W - 50, shY = 16;
