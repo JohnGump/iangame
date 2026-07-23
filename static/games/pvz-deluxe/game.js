@@ -685,18 +685,24 @@
     }
 
     // ---- 商店 / 放置 ----
-    // 商店:单行 + 横向滚动(放不下时左右滑动)
-    var SHOP_CARD_W = 66, SHOP_CARD_H = 60, SHOP_GAP = 6;
-    var SHOP_AREA_X = 10, SHOP_AREA_Y = 14, SHOP_AREA_W = 340, SHOP_AREA_H = SHOP_CARD_H;
-    var shopScroll = 0, shopDragging = false, shopDragStartX = 0, shopDragStartScroll = 0, shopDragMoved = false;
-    var shopHover = false, downPos = null;
-    function shopTotalWidth() { return SHOP_KEYS.length * (SHOP_CARD_W + SHOP_GAP) - SHOP_GAP; }
-    function shopMaxScroll() { return Math.max(0, shopTotalWidth() - SHOP_AREA_W); }
+    // 商店:单行平铺,卡片宽度自适应 canvas 宽度(不写死,不滚动)
+    var SHOP_AREA_X = 10, SHOP_AREA_Y = 12, SHOP_AREA_H = 66;
+    var SHOP_SUN_W = 96;                 // 阳光面板预留宽度
+    var SHOP_RIGHT_PAD = 60;             // 右侧铲子等预留
+    var downPos = null;
+    function shopLayout() {
+      var rightLimit = W - SHOP_RIGHT_PAD - SHOP_SUN_W;  // 商店右边界(给阳光面板让位)
+      var avail = rightLimit - SHOP_AREA_X;
+      var gap = 6;
+      var cw = Math.floor((avail - gap * (SHOP_KEYS.length - 1)) / SHOP_KEYS.length);
+      cw = Math.max(58, Math.min(cw, 120));   // 卡宽区间 58~120,避免极端
+      return { cw: cw, gap: gap, rightLimit: rightLimit };
+    }
     function shopCardRect(key) {
       var i = SHOP_KEYS.indexOf(key);
-      return { x: SHOP_AREA_X + i * (SHOP_CARD_W + SHOP_GAP) - shopScroll, y: SHOP_AREA_Y, w: SHOP_CARD_W, h: SHOP_CARD_H };
+      var L = shopLayout();
+      return { x: SHOP_AREA_X + i * (L.cw + L.gap), y: SHOP_AREA_Y, w: L.cw, h: SHOP_AREA_H };
     }
-    function inShopArea(mx, my) { return mx >= SHOP_AREA_X && mx <= SHOP_AREA_X + SHOP_AREA_W && my >= SHOP_AREA_Y && my <= SHOP_AREA_Y + SHOP_AREA_H; }
     function trySelectShop(key, mx, my) {
       var card = shopCardRect(key);
       if (mx >= card.x && mx <= card.x + card.w && my >= card.y && my <= card.y + card.h) {
@@ -743,62 +749,23 @@
     }
 
     function onHandle(pos, phase, extra) {
-      // ESC:清选区
       if (phase === 'esc') { state.selected = null; state.shovelActive = false; return; }
-      // 滚轮:商店区域横向滚动
-      if (phase === 'wheel') {
-        if (shopHover) shopScroll = clamp(shopScroll + (extra.dx > 0 ? 60 : -60), 0, shopMaxScroll());
-        return;
-      }
+      if (phase === 'wheel') return;   // 平铺无需滚动
       if (!pos) return;
-
-      // DOWN:记录拖动起点(商店内)
+      // down/up/move 都按"当前坐标"即时响应(平铺后卡片足够大,点击即可,无需拖动手势)
+      if (phase === 'move') { state.hoverCell = pickCell(pos.x, pos.y); return; }
+      if (phase !== 'down' && phase !== 'up') return;
+      // 点击(仅处理 down 即可,up 不重复;触屏 touchstart=down 已覆盖)
       if (phase === 'down') {
-        if (inShopArea(pos.x, pos.y)) {
-          shopDragging = true; shopDragMoved = false;
-          shopDragStartX = pos.x; shopDragStartScroll = shopScroll;
-          return;   // 商店内的 down 先不触发选中,等 up 时按"是否拖动"决定
+        if (pos.y < HUD_TOP) {
+          // 顶部 HUD 区:商店卡片优先,再铲子
+          for (var i = 0; i < SHOP_KEYS.length; i++) if (trySelectShop(SHOP_KEYS[i], pos.x, pos.y)) return;
+          if (tryShovel(pos.x, pos.y)) return;
+          return;
         }
-        downPos = { x: pos.x, y: pos.y };
-        // 非商店区:立即处理(铲子/收阳光/放植物)
         if (tryShovel(pos.x, pos.y)) return;
         if (tryCollectSun(pos.x, pos.y)) return;
-        // 草坪区按下 = 准备放植物(也在 up 时确认,避免和拖动冲突)
-        return;
-      }
-
-      // MOVE:更新 hover + 商店拖动滚动
-      if (phase === 'move') {
-        if (shopHover == null) shopHover = false;
-        shopHover = inShopArea(pos.x, pos.y);
-        if (shopDragging) {
-          var dx = pos.x - shopDragStartX;
-          if (Math.abs(dx) > 4) shopDragMoved = true;
-          shopScroll = clamp(shopDragStartScroll - dx, 0, shopMaxScroll());
-          return;
-        }
-        state.hoverCell = pickCell(pos.x, pos.y);
-        return;
-      }
-
-      // UP:确认操作
-      if (phase === 'up') {
-        // 商店拖动结束:若没真正拖动(只是点击),则尝试选中当前卡片
-        if (shopDragging) {
-          shopDragging = false;
-          if (!shopDragMoved && pos.x >= 0) {
-            for (var i = 0; i < SHOP_KEYS.length; i++) if (trySelectShop(SHOP_KEYS[i], pos.x, pos.y)) break;
-          }
-          return;
-        }
-        // 草坪放置:up 时确认(避免拖动误放)
-        if (pos.x >= 0 && pos.y >= HUD_TOP) {
-          if (tryShovel(pos.x, pos.y)) return;
-          if (tryCollectSun(pos.x, pos.y)) return;
-          tryPlace(pos.x, pos.y);
-        }
-        downPos = null;
-        return;
+        tryPlace(pos.x, pos.y);
       }
     }
 
@@ -1298,11 +1265,8 @@
       ctx.strokeStyle = 'rgba(124,58,237,0.3)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, HUD_TOP); ctx.lineTo(W, HUD_TOP); ctx.stroke();
 
-      // 商店容器背景 + 滚动裁剪区(单行,放不下横向滑动)
-      ctx.fillStyle = 'rgba(13,19,32,0.6)';
-      roundRectPath(ctx, SHOP_AREA_X - 4, SHOP_AREA_Y - 4, SHOP_AREA_W + 8, SHOP_AREA_H + 8, 10); ctx.fill();
-      ctx.save();
-      ctx.beginPath(); ctx.rect(SHOP_AREA_X, SHOP_AREA_Y, SHOP_AREA_W, SHOP_AREA_H); ctx.clip();
+      // 商店:8 张卡片单行平铺,宽度自适应(不滚动)
+      var L = shopLayout();
       for (var i = 0; i < SHOP_KEYS.length; i++) {
         var key = SHOP_KEYS[i];
         var def = PLANTS[key];
@@ -1317,37 +1281,22 @@
         // 元素角标
         if (def.element) {
           ctx.fillStyle = ELEMENT_CFG[def.element].color;
-          ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+          ctx.font = '13px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
           ctx.fillText(ELEMENT_CFG[def.element].icon, r.x + r.w - 4, r.y + 2);
         }
         ctx.save();
-        ctx.beginPath(); ctx.rect(r.x + 2, r.y + 2, r.w - 4, r.h - 16); ctx.clip();
+        ctx.beginPath(); ctx.rect(r.x + 2, r.y + 2, r.w - 4, r.h - 18); ctx.clip();
         drawPlantByType(ctx, key, r.x + r.w / 2, r.y + r.h / 2 + 6, r.w * 0.95, state.time, false, { hpRatio: 1, fuse: 1 });
         ctx.restore();
         if (cooling) { var pct = state.shopCD[key] / def.recharge; ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(r.x, r.y, r.w, r.h * pct); }
         if (!affordable || cooling) { ctx.fillStyle = 'rgba(0,0,0,0.4)'; roundRectPath(ctx, r.x, r.y, r.w, r.h, 8); ctx.fill(); }
-        ctx.font = 'bold 11px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = 'bold 12px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillStyle = affordable ? COLOR.sun : COLOR.text2;
-        ctx.fillText(def.cost, r.x + r.w / 2, r.y + r.h - 8);
-      }
-      ctx.restore();
-      // 滚动条指示(仅当内容溢出)
-      if (shopMaxScroll() > 0) {
-        var trackW = SHOP_AREA_W - 20, tbX = SHOP_AREA_X + 10, tbY = SHOP_AREA_Y + SHOP_AREA_H + 4;
-        ctx.fillStyle = 'rgba(255,255,255,0.1)'; roundRectPath(ctx, tbX, tbY, trackW, 3, 1.5); ctx.fill();
-        var thumbW = Math.max(20, trackW * SHOP_AREA_W / shopTotalWidth());
-        var thumbX = tbX + (trackW - thumbW) * (shopScroll / shopMaxScroll());
-        ctx.fillStyle = 'rgba(0,224,255,0.6)'; roundRectPath(ctx, thumbX, tbY, thumbW, 3, 1.5); ctx.fill();
-      }
-      // 拖动提示(hover 商店且可滚动时)
-      if (shopHover && shopMaxScroll() > 0) {
-        ctx.font = '10px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillStyle = 'rgba(139,151,179,0.7)';
-        ctx.fillText('← 拖动 / 滚轮浏览 →', SHOP_AREA_X + SHOP_AREA_W / 2, SHOP_AREA_Y + SHOP_AREA_H + 10);
+        ctx.fillText(def.cost, r.x + r.w / 2, r.y + r.h - 9);
       }
 
-      // 阳光面板(商店右侧)
-      var sx = SHOP_AREA_X + SHOP_AREA_W + 10, sy = 14, sw = 92, sh = SHOP_CARD_H;
+      // 阳光面板(商店右侧,位置随 shopLayout 自适应)
+      var sx = L.rightLimit + 10, sy = SHOP_AREA_Y, sw = SHOP_SUN_W - 10, sh = SHOP_AREA_H;
       ctx.fillStyle = 'rgba(13,19,32,0.9)'; roundRectPath(ctx, sx, sy, sw, sh, 10); ctx.fill();
       ctx.strokeStyle = 'rgba(255,216,77,0.4)'; ctx.lineWidth = 1; roundRectPath(ctx, sx, sy, sw, sh, 10); ctx.stroke();
       drawSun(ctx, { x: sx + 22, y: sy + sh / 2, phase: 0 }, state.time);
