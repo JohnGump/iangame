@@ -845,11 +845,13 @@
     // ---- 商店 / 放置 ----
     // 商店:单行平铺,卡片宽度自适应 canvas 宽度(不写死,不滚动)
     var SHOP_AREA_X = 10, SHOP_AREA_Y = 12, SHOP_AREA_H = 66;
-    var SHOP_SUN_W = 96;                 // 阳光面板预留宽度
-    var SHOP_RIGHT_PAD = 60;             // 右侧铲子等预留
+    var SHOP_SUN_W = 96;                // 阳光面板宽度
+    // 右侧功能区:阳光面板 + 波次信息 + 铲子/自动收阳光按钮(统一预留)
+    var RIGHT_PANEL_X = W - 300;        // 右侧功能区起点(阳光面板左边界)
+    var RIGHT_BTN_X = W - 52;           // 右侧按钮区起点
     var downPos = null;
     function shopLayout() {
-      var rightLimit = W - SHOP_RIGHT_PAD - SHOP_SUN_W;  // 商店右边界(给阳光面板让位)
+      var rightLimit = RIGHT_PANEL_X - 10;   // 商店右边界(给右侧功能区让位)
       var avail = rightLimit - SHOP_AREA_X;
       var gap = 6;
       var cw = Math.floor((avail - gap * (SHOP_KEYS.length - 1)) / SHOP_KEYS.length);
@@ -888,8 +890,9 @@
       audio.plant();
       return true;
     }
-    // 自动收阳光按钮(铲子左侧)
-    function autoSunBtnRect() { return { x: W - 94, y: 16, w: 38, h: 38 }; }
+    // 自动收阳光按钮 + 铲子按钮(右侧按钮区,垂直排两行避免和波次信息挤)
+    function autoSunBtnRect() { return { x: RIGHT_BTN_X, y: 12, w: 38, h: 30 }; }
+    function shovelBtnRect() { return { x: RIGHT_BTN_X, y: 46, w: 38, h: 30 }; }
     function tryAutoSun(mx, my) {
       var r = autoSunBtnRect();
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
@@ -900,8 +903,9 @@
       return false;
     }
     function tryShovel(mx, my) {
-      var sx = W - 50, sy = 16;
-      if (mx >= sx && mx <= sx + 38 && my >= sy && my <= sy + 38) { state.shovelActive = !state.shovelActive; return true; }
+      var sr = shovelBtnRect();
+      var sx = sr.x, sy = sr.y, sw = sr.w, sh = sr.h;
+      if (mx >= sx && mx <= sx + sw && my >= sy && my <= sy + sh) { state.shovelActive = !state.shovelActive; return true; }
       if (state.shovelActive) {
         var cell = pickCell(mx, my);
         if (cell) {
@@ -1557,8 +1561,9 @@
         ctx.fillText(def.cost, r.x + r.w / 2, r.y + r.h - 9);
       }
 
-      // 阳光面板(商店右侧,位置随 shopLayout 自适应)
-      var sx = L.rightLimit + 10, sy = SHOP_AREA_Y, sw = SHOP_SUN_W - 10, sh = SHOP_AREA_H;
+      // ---- 右侧功能区(阳光面板 + 波次信息 + 按钮区,统一布局避免重叠) ----
+      // 阳光面板(RIGHT_PANEL_X 起点)
+      var sx = RIGHT_PANEL_X, sy = SHOP_AREA_Y, sw = SHOP_SUN_W, sh = SHOP_AREA_H;
       ctx.fillStyle = 'rgba(13,19,32,0.9)'; roundRectPath(ctx, sx, sy, sw, sh, 10); ctx.fill();
       ctx.strokeStyle = 'rgba(255,216,77,0.4)'; ctx.lineWidth = 1; roundRectPath(ctx, sx, sy, sw, sh, 10); ctx.stroke();
       drawSun(ctx, { x: sx + 22, y: sy + sh / 2, phase: 0 }, state.time);
@@ -1566,42 +1571,42 @@
       ctx.fillStyle = COLOR.sun; ctx.shadowColor = 'rgba(255,216,77,0.6)'; ctx.shadowBlur = 8;
       ctx.fillText(state.sun, sx + 46, sy + sh / 2); ctx.shadowBlur = 0;
 
-      // 波次信息(右上)
-      ctx.font = 'bold 14px Rajdhani, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-      ctx.fillStyle = COLOR.text;
-      ctx.fillText('第 ' + state.level + ' / ' + LEVELS + ' 章', W - 100, 14);
-      ctx.fillStyle = COLOR.text2; ctx.font = '13px Rajdhani, sans-serif';
-      ctx.fillText('第 ' + state.wave + ' / ' + WAVES_PER_LEVEL + ' 波 · 剩余 ' + state.zombies.length, W - 100, 34);
-      var pw = 120, px = W - 160, py = 56;
-      ctx.fillStyle = 'rgba(0,0,0,0.4)'; roundRectPath(ctx, px, py, pw, 6, 3); ctx.fill();
+      // 波次信息(阳光面板右侧 到 按钮区之间)
+      var waveX = RIGHT_PANEL_X + SHOP_SUN_W + 12, waveRight = RIGHT_BTN_X - 8;
+      var waveW = waveRight - waveX;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = 'bold 14px Rajdhani, sans-serif'; ctx.fillStyle = COLOR.text;
+      ctx.fillText('第 ' + state.level + ' / ' + LEVELS + ' 章', waveX, 14);
+      ctx.font = '12px Rajdhani, sans-serif'; ctx.fillStyle = COLOR.text2;
+      ctx.fillText('第 ' + state.wave + ' / ' + WAVES_PER_LEVEL + ' 波', waveX, 33);
+      ctx.fillText('剩余 ' + state.zombies.length, waveX, 49);
+      // 波次进度条
+      var pw = waveW, px = waveX, py = 67;
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; roundRectPath(ctx, px, py, pw, 5, 2.5); ctx.fill();
       var prog = (state.wave - 1 + (1 - state.zombies.length / Math.max(1, state.zombiesToSpawn + state.zombies.length))) / WAVES_PER_LEVEL;
-      ctx.fillStyle = COLOR.neon2; roundRectPath(ctx, px, py, pw * clamp(prog, 0, 1), 6, 3); ctx.fill();
+      ctx.fillStyle = COLOR.neon2; roundRectPath(ctx, px, py, pw * clamp(prog, 0, 1), 5, 2.5); ctx.fill();
 
-      // 自动收阳光开关按钮(铲子左侧)
+      // 按钮区:自动收阳光(上行)+ 铲子(下行),垂直排列
       var ar = autoSunBtnRect();
       ctx.fillStyle = state.autoSun ? 'rgba(255,216,77,0.3)' : 'rgba(20,27,46,0.9)';
-      roundRectPath(ctx, ar.x, ar.y, ar.w, ar.h, 8); ctx.fill();
+      roundRectPath(ctx, ar.x, ar.y, ar.w, ar.h, 7); ctx.fill();
       ctx.strokeStyle = state.autoSun ? COLOR.sun : 'rgba(124,58,237,0.4)'; ctx.lineWidth = state.autoSun ? 2 : 1;
-      roundRectPath(ctx, ar.x, ar.y, ar.w, ar.h, 8); ctx.stroke();
-      ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      roundRectPath(ctx, ar.x, ar.y, ar.w, ar.h, 7); ctx.stroke();
+      ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = state.autoSun ? COLOR.sun : COLOR.text2;
-      ctx.fillText('☀', ar.x + ar.w / 2, ar.y + ar.h / 2);
-      // 开关状态小圆点
+      ctx.fillText('☀', ar.x + ar.w / 2 - 4, ar.y + ar.h / 2);
+      // 开关状态点
       ctx.fillStyle = state.autoSun ? COLOR.ok : COLOR.text3;
-      ctx.beginPath(); ctx.arc(ar.x + ar.w - 5, ar.y + 5, 3, 0, Math.PI * 2); ctx.fill();
-      // 悬停提示
-      ctx.font = '10px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillStyle = COLOR.text2;
-      ctx.fillText('自动', ar.x + ar.w / 2, ar.y + ar.h + 2);
+      ctx.beginPath(); ctx.arc(ar.x + ar.w - 6, ar.y + ar.h / 2, 3, 0, Math.PI * 2); ctx.fill();
 
-      // 铲子按钮
-      var shX = W - 50, shY = 16;
+      var sr2 = shovelBtnRect();
       ctx.fillStyle = state.shovelActive ? 'rgba(0,224,255,0.3)' : 'rgba(20,27,46,0.9)';
-      roundRectPath(ctx, shX, shY, 38, 38, 8); ctx.fill();
+      roundRectPath(ctx, sr2.x, sr2.y, sr2.w, sr2.h, 7); ctx.fill();
       ctx.strokeStyle = state.shovelActive ? COLOR.neon : 'rgba(124,58,237,0.4)'; ctx.lineWidth = state.shovelActive ? 2 : 1;
-      roundRectPath(ctx, shX, shY, 38, 38, 8); ctx.stroke();
-      ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🪏', shX + 19, shY + 19);
+      roundRectPath(ctx, sr2.x, sr2.y, sr2.w, sr2.h, 7); ctx.stroke();
+      ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = state.shovelActive ? COLOR.neon : COLOR.text;
+      ctx.fillText('🪏', sr2.x + sr2.w / 2, sr2.y + sr2.h / 2);
     }
 
     function drawBossHUD() {
