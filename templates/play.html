@@ -129,23 +129,69 @@
     else { ctrl.resume(); pauseBtn.textContent = '⏸ 暂停'; }
   });
 
-  // 全屏切换
-  fsBtn.addEventListener('click', function () {
-    if (!document.fullscreenElement) {
-      (canvasBox.requestFullscreen || canvasBox.webkitRequestFullscreen || function(){}).call(canvasBox);
-    } else {
-      (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+  // ---------- 全屏切换(桌面真全屏 + 移动端伪全屏 fallback + 横屏适配) ----------
+  // 浮层退出按钮(全屏 / 伪全屏时由 CSS 显示)
+  var fsExitBtn = document.createElement('button');
+  fsExitBtn.className = 'fs-exit-btn';
+  fsExitBtn.innerHTML = '🗗';
+  fsExitBtn.title = '退出全屏 (ESC)';
+  fsExitBtn.setAttribute('aria-label', '退出全屏');
+  canvasBox.appendChild(fsExitBtn);
+
+  function tryLockLandscape() {
+    // Chrome Android 可锁横屏,iOS Safari 不支持(静默失败)
+    try {
+      var so = screen.orientation || {};
+      if (so.lock) so.lock('landscape').catch(function () {});
+    } catch (e) {}
+  }
+  function enterFs() {
+    // 优先原生 Fullscreen API
+    var req = canvasBox.requestFullscreen || canvasBox.webkitRequestFullscreen;
+    var usedNative = false;
+    if (req) {
+      try {
+        var r = req.call(canvasBox);
+        if (r && r.then) {
+          r.then(function () { usedNative = true; }).catch(function () { usedNative = false; });
+        } else {
+          usedNative = true;   // 同步旧 API,以 fullscreenchange 为准
+        }
+      } catch (e) { usedNative = false; }
     }
-  });
+    // 300ms 内未进入真全屏 → 走伪全屏 fallback(iOS Safari / 桌面拒绝授权)
+    setTimeout(function () {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        canvasBox.classList.add('pseudo-fs');
+        tryLockLandscape();
+      }
+    }, 300);
+  }
+  function exitFs() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen || function () {}).call(document);
+    }
+    if (canvasBox.classList.contains('pseudo-fs')) {
+      canvasBox.classList.remove('pseudo-fs');
+      try { (screen.orientation || {}).unlock && screen.orientation.unlock(); } catch (e) {}
+    }
+  }
+  function isFs() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || canvasBox.classList.contains('pseudo-fs'));
+  }
+
+  fsBtn.addEventListener('click', function () { isFs() ? exitFs() : enterFs(); });
+  fsExitBtn.addEventListener('click', exitFs);
   document.addEventListener('fullscreenchange', function () {
     fsBtn.textContent = document.fullscreenElement ? '🗗 退出全屏' : '⛶ 全屏';
   });
   document.addEventListener('webkitfullscreenchange', function () {
     fsBtn.textContent = document.webkitFullscreenElement ? '🗗 退出全屏' : '⛶ 全屏';
   });
-  // ESC 退出全屏由浏览器处理;游戏内 ESC 选区清除在全屏时也兼容
+  // ESC:F11 切换全屏;伪全屏时浏览器不会自动退出,需手动处理
   document.addEventListener('keydown', function (e) {
     if (e.key === 'F11') { e.preventDefault(); fsBtn.click(); }
+    if (e.key === 'Escape' && canvasBox.classList.contains('pseudo-fs')) { exitFs(); }
   });
 
   function beginGame(diff) {
