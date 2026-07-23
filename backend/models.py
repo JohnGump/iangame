@@ -85,6 +85,9 @@ SEED_GAMES = [
     {"slug": "starfall", "name": "星陨防线", "category": "defense", "icon": "🛰️", "color": "#00e0ff",
      "desc": "太空科幻路径塔防:5种炮塔(光子/震荡/凝冰/雷电/天基)克制6种敌人,7关递进战役含Boss,三难度可调",
      "controls": "点建塔卡片选塔→点空地建造·点塔可升级/卖出·1-5键快选·Tab加速·ESC取消"},
+    {"slug": "pvz-deluxe", "name": "植物大战僵尸精致版", "category": "defense", "icon": "🌿", "color": "#39d98a",
+     "desc": "精致塔防·植物贝塞尔自绘·元素反应(冰/火/毒/电)·光环增益·12植物·12僵尸·12关+Boss",
+     "controls": "点商店选植物→点空地放置·收阳光·铲子可移除"},
 ]
 
 CATEGORY_LABELS = {
