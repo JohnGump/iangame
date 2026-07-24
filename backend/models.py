@@ -88,6 +88,9 @@ SEED_GAMES = [
     {"slug": "pvz-deluxe", "name": "植物大战僵尸精致版", "category": "defense", "icon": "🌿", "color": "#39d98a",
      "desc": "精致塔防·植物贝塞尔自绘·元素反应(冰/火/毒/电)·光环增益·12植物·12僵尸·12关+Boss",
      "controls": "点商店选植物→点空地放置·收阳光·铲子可移除"},
+    {"slug": "tankbattle-deluxe", "name": "坦克大战精致版", "category": "shooter", "icon": "🛡️", "color": "#39d98a",
+     "desc": "精致射击·坦克贝塞尔自绘·3星成长·8道具·5种敌坦差异化AI·20关手工地图+Boss",
+     "controls": "WASD/方向键移动·空格开炮·拾取道具强化"},
 ]
 
 CATEGORY_LABELS = {
