@@ -643,7 +643,9 @@
       particles: makeParticles(),
       enemiesLeft: 0, spawnCool: 0, maxOnField: 3,
       toasts: [], levelBanner: 0, levelBannerText: '',
-      freezeTimer: 0, speedBoostTimer: 0, bossActive: false, boss: null
+      freezeTimer: 0, speedBoostTimer: 0, bossActive: false, boss: null,
+      // 玩家成长状态(跨关继承,过关不清零;只有 start/reset 时重置)
+      carryTier: 0, carryMaxHp: PLAYER_TIERS[0].hp, carryShield: 0, carryPierce: 0
     };
 
     var audio = makeAudio();
@@ -699,8 +701,11 @@
     }
 
     // ---- 坦克工厂 ----
-    function makePlayer() {
-      var tier = 0;   // 初始 1 星
+    // keepTier=true 时继承跨关成长(等级/血量上限),用于过关进入下一关;
+    // keepTier=false 时重置为初始 1 星,用于开新局/reset/复活。
+    function makePlayer(keepTier) {
+      var tier = keepTier ? state.carryTier : 0;
+      var maxHp = keepTier ? state.carryMaxHp : PLAYER_TIERS[0].hp;
       var baseC = Math.floor(COLS / 2), baseR = ROWS - 1;
       // 出生在基地左上(紧邻老家,已由 loadMap 清空该区域)
       var pc = baseC - 1, pr = baseR - 1;
@@ -708,10 +713,20 @@
         x: offX + pc * CELL + CELL / 2, y: offY + pr * CELL + CELL / 2,
         dir: 0, cool: 0, hurt: 0, shieldTimer: 0, tierIdx: tier, isPlayer: true,
         moving: false, size: CELL * 0.86, spawnProtect: 1.5,
-        hp: PLAYER_TIERS[tier].hp, maxHp: PLAYER_TIERS[tier].hp, pierceTimer: 0
+        hp: maxHp, maxHp: maxHp,
+        pierceTimer: keepTier ? (state.carryPierce || 0) : 0,
+        shieldTimer: keepTier ? (state.carryShield || 0) : 0
       };
     }
     function getTier() { return PLAYER_TIERS[state.player.tierIdx]; }
+    // 把当前玩家成长状态保存到 state(供下一关继承)
+    function saveCarry() {
+      if (!state.player) return;
+      state.carryTier = state.player.tierIdx;
+      state.carryMaxHp = state.player.maxHp;
+      state.carryShield = Math.max(0, state.player.shieldTimer);
+      state.carryPierce = Math.max(0, state.player.pierceTimer);
+    }
     function makeEnemy(type, spawnIdx) {
       var def = ENEMIES[type];
       // 三个出生点:顶部左/中/右
@@ -812,6 +827,7 @@
           var nt = PLAYER_TIERS[state.player.tierIdx];
           state.player.maxHp = nt.hp;
           state.player.hp = nt.hp;
+          saveCarry();   // 持久化到跨关成长
           audio.levelup();
           toast('升级到 ' + (state.player.tierIdx + 1) + ' 星!', 'ok');
         } else { state.score += 500; emitScore(); }
@@ -1109,8 +1125,9 @@
       audio.explode();
       state.shake = 0.8;
       if (state.lives <= 0) { gameOver(false); return; }
-      // 复活
-      state.player = makePlayer();
+      // 复活:保留当前等级(被打死不降级),血量回满
+      saveCarry();
+      state.player = makePlayer(true);
       toast('剩余 ' + state.lives + ' 命', 'warn');
     }
 
@@ -1129,7 +1146,10 @@
     }
     function startLevel() {
       loadMap(state.level);
-      state.player = makePlayer();
+      // 过关进入下一关:继承玩家等级与血量上限(buff 清零,重新吃道具)
+      var isContinue = state.player != null;
+      if (isContinue) saveCarry();
+      state.player = makePlayer(isContinue);
       state.enemies = []; state.bullets = []; state.powerups = []; state.effects = [];
       state.particles.clear();
       state.bossActive = false; state.boss = null;
@@ -1442,8 +1462,15 @@
       var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
       // 暂停键
       if (input.isDown('p')) { input.keys['p'] = false; if (state.running && !state.over) { state.paused = !state.paused; emitState(state.paused ? 'paused' : 'playing'); } }
-      if (state.running && !state.paused && !state.over) update(dt);
-      draw();
+      try {
+        if (state.running && !state.paused && !state.over) update(dt);
+      } catch (err) {
+        if (typeof console !== 'undefined') console.error('[tankbattle-deluxe] update 异常:', err);
+        state.running = false;
+      }
+      try { draw(); } catch (err2) {
+        if (typeof console !== 'undefined') console.error('[tankbattle-deluxe] draw 异常:', err2);
+      }
       rafId = requestAnimationFrame(loop);
     }
 
@@ -1454,6 +1481,11 @@
       state.enemies = []; state.bullets = []; state.powerups = []; state.effects = [];
       state.particles.clear(); state.toasts = [];
       state.freezeTimer = 0; state.speedBoostTimer = 0;
+      // 开新局:清空玩家与跨关成长,从初始 1 星开始
+      state.player = null;
+      state.carryTier = 0; state.carryMaxHp = PLAYER_TIERS[0].hp;
+      state.carryShield = 0; state.carryPierce = 0;
+      state.speedBoostTimer = 0; state.freezeTimer = 0;
       startLevel();
       emitScore(); emitState('playing');
     }
