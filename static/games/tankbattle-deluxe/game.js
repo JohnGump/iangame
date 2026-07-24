@@ -28,7 +28,7 @@
   // 配置常量
   // ============================================================
   var COLS = 15, ROWS = 13;            // 网格
-  var LEVELS = 5;                       // Phase 1 先做 5 关
+  var LEVELS = 20;                      // Phase 2 扩展到 20 关
   var HUD_TOP = 56;                     // 顶部 HUD 高度
   // 地形类型
   var T = { EMPTY: 0, BRICK: 1, STEEL: 2, GRASS: 3, WATER: 4, BASE: 5 };
@@ -42,7 +42,9 @@
     p1: '#00e0ff', p1d: '#005566',     // 玩家青蓝
     e1: '#ff2e63', e1d: '#7a1430',     // 敌方红
     e2: '#ff7847', e2d: '#7a3a10',     // 敌方橙(重)
-    e3: '#b537f2', e3d: '#5a1a6a'      // 敌方紫(快)
+    e3: '#b537f2', e3d: '#5a1a6a',     // 敌方紫(快)
+    e4: '#9aa6b4', e4d: '#3a4654',     // 敌方灰(装甲)
+    e5: '#2ee6a6', e5d: '#0a5a3a'      // 敌方绿(狙击)
   };
 
   // ============================================================
@@ -58,13 +60,19 @@
   ];
 
   // ============================================================
-  // 敌方坦克定义(Phase 1: 3 种)
-  //   ai: patrol 巡逻 / chase 追击
+  // 敌方坦克定义(Phase 2: 5 种)
+  //   ai: patrol 巡逻 / chase 追击 / sniper 狙击(远程保持距离)/ charge 冲锋(直冲基地)
   // ============================================================
   var ENEMIES = {
     light:  { name: '轻型坦克', hp: 1, speed: 1.6, fireRate: 1.2, score: 100, color: COLOR.e1, colorD: COLOR.e1d, ai: 'patrol' },
     heavy:  { name: '重型坦克', hp: 3, speed: 1.0, fireRate: 1.5, score: 200, color: COLOR.e2, colorD: COLOR.e2d, ai: 'patrol' },
-    fast:   { name: '快速坦克', hp: 1, speed: 2.4, fireRate: 0.9, score: 150, color: COLOR.e3, colorD: COLOR.e3d, ai: 'chase' }
+    fast:   { name: '快速坦克', hp: 1, speed: 2.4, fireRate: 0.9, score: 150, color: COLOR.e3, colorD: COLOR.e3d, ai: 'chase' },
+    armor:  { name: '装甲坦克', hp: 5, speed: 0.9, fireRate: 1.4, score: 300, color: COLOR.e4, colorD: COLOR.e4d, ai: 'charge', frontArmor: true },
+    sniper: { name: '狙击坦克', hp: 2, speed: 1.4, fireRate: 0.7, score: 250, color: COLOR.e5, colorD: COLOR.e5d, ai: 'sniper', longShot: true }
+  };
+  // Boss 坦克(第 5/10/15/20 关)
+  var BOSS = {
+    name: '装甲巨兽', hp: 20, speed: 0.8, fireRate: 0.6, score: 1000, color: COLOR.neon2, colorD: '#3a0a5a', isBoss: true
   };
 
   // ============================================================
@@ -75,8 +83,14 @@
     shield:  { name: '护盾', icon: '🛡', color: COLOR.neon, desc: '短暂无敌' },
     life:    { name: '加命', icon: '❤', color: COLOR.danger, desc: '+1 生命' },
     speed:   { name: '加速', icon: '⚡', color: COLOR.ok, desc: '移速提升' },
-    bomb:    { name: '全屏炸弹', icon: '💥', color: COLOR.neon2, desc: '清空全屏敌人' }
+    bomb:    { name: '全屏炸弹', icon: '💥', color: COLOR.neon2, desc: '清空全屏敌人' },
+    freeze:  { name: '停敌', icon: '❄', color: COLOR.ice2, desc: '冻结所有敌人' },
+    pierce:  { name: '穿甲弹', icon: '➤', color: COLOR.neon2, desc: '临时穿透钢墙' },
+    ironwall:{ name: '基地铁墙', icon: '⬢', color: COLOR.steel2, desc: '基地变钢墙防御' }
   };
+  // 道具颜色补充
+  COLOR.ice2 = '#6fd0ff';
+  COLOR.steel2 = '#b8c0cc';
 
   // ============================================================
   // 手工地图(5 关)。字符表示地形:
@@ -163,6 +177,166 @@
       "..B.BB.BB.B.B..",
       "..B.........B..",
       "..S....X....S.."
+    ],
+    // 第 6 关:十字走廊
+    [
+      ".......B.......",
+      "...B...B...B...",
+      "...B...B...B...",
+      ".......B.......",
+      "BBB.........BBB",
+      "....G.....G....",
+      ".......X.......",
+      "....G.....G....",
+      "BBB.........BBB",
+      ".......B.......",
+      "...B...B...B...",
+      "...B...B...B...",
+      ".......B......."
+    ],
+    // 第 7 关:钢铁堡垒
+    [
+      ".SSS.......SSS.",
+      ".S.B.B.B.B.S...",
+      ".S.B.B.B.B.S...",
+      ".SSS.......SSS.",
+      "...............",
+      "..W...GGG...W..",
+      "..W..........W.",
+      "..W...GGG...W..",
+      "...............",
+      ".SSS.......SSS.",
+      ".S.B.B.B.B.S...",
+      ".S.B.B.B.B.S...",
+      ".SSS...X...SSS."
+    ],
+    // 第 8 关:棋盘
+    [
+      ".B.B.B.B.B.B.B.",
+      "B.B.B.B.B.B.B.B",
+      ".B.B.B.B.B.B.B.",
+      "B.B.B.B.B.B.B.B",
+      "...............",
+      "GGG...SSS...GGG",
+      "...............",
+      "GGG...SSS...GGG",
+      "...............",
+      ".B.B.B.B.B.B.B.",
+      "B.B.B.B.B.B.B.B",
+      ".B.B.B.B.B.B.B.",
+      "B.B.B...X.B.B.B"
+    ],
+    // 第 9 关:河道
+    [
+      "...............",
+      "..BBB.....BBB..",
+      "..B.B.WWW.B.B..",
+      "..BBB.WWW.BBB..",
+      ".......WWW.....",
+      "..G.......G....",
+      ".......WWW.....",
+      "..BBB.WWW.BBB..",
+      "..B.B.WWW.B.B..",
+      "..BBB.....BBB..",
+      "...............",
+      "..BB.BBB.BB....",
+      ".......X......."
+    ],
+    // 第 10 关:Boss 之厅(开阔,适合 Boss 战)
+    [
+      "...............",
+      "...............",
+      "...S.......S...",
+      "...B.......B...",
+      "...............",
+      "...............",
+      "GGGGGGGXGGGGGGG",
+      "...............",
+      "...............",
+      "...B.......B...",
+      "...S.......S...",
+      "...............",
+      "..............."
+    ],
+    // 第 11 关:迷雾森林
+    [
+      "GGGGGGGGGGGGGGG",
+      "G.B.B.B.B.B.B.G",
+      "G.B.B.B.B.B.B.G",
+      "GGG.........GGG",
+      "...............",
+      "..S...BBB...S..",
+      ".......X.......",
+      "..S...BBB...S..",
+      "...............",
+      "GGG.........GGG",
+      "G.B.B.B.B.B.B.G",
+      "G.B.B.B.B.B.B.G",
+      "GGGGGGGGGGGGGGG"
+    ],
+    // 第 12 关:螺旋
+    [
+      "...............",
+      ".BBBBBBBBBBBBB.",
+      ".B...........B.",
+      ".B.SSSSSSSSS.B.",
+      ".B.S.......S.B.",
+      ".B.S..GGG..S.B.",
+      ".B.S..GXG..S.B.",
+      ".B.S..GGG..S.B.",
+      ".B.S.......S.B.",
+      ".B.SSSSSSSSS.B.",
+      ".B...........B.",
+      ".BBBBBBBBBBBBB.",
+      "..............."
+    ],
+    // 第 13 关:双河
+    [
+      "...............",
+      "..B.B.WWW.B.B..",
+      "..B.B.WWW.B.B..",
+      "...............",
+      "WWWW.......WWWW",
+      "...G..B..G.....",
+      "...............",
+      "...G..B..G.....",
+      "WWWW.......WWWW",
+      "...............",
+      "..B.B.WWW.B.B..",
+      "..B.B.WWW.B.B..",
+      ".......X......."
+    ],
+    // 第 14 关:炮台阵
+    [
+      ".S.B.S.B.S.B.S.",
+      ".B.S.B.S.B.S.B.",
+      "...............",
+      "BB.BB.B.B.BB.BB",
+      "...............",
+      "..G...SSS...G..",
+      ".......X.......",
+      "..G...SSS...G..",
+      "...............",
+      "BB.BB.B.B.BB.BB",
+      "...............",
+      ".B.S.B.S.B.S.B.",
+      ".S.B.S.B.S.B.S."
+    ],
+    // 第 15 关:终极迷宫(Boss)
+    [
+      "SBSBSBSBSBSBSBS",
+      "B.B.B.B.B.B.B.B",
+      "S.B.S.B.S.B.S.B",
+      "...............",
+      "B.BB.B.B.B.BB.B",
+      "..G...SSS...G..",
+      "GGGGGGGXGGGGGGG",
+      "..G...SSS...G..",
+      "B.BB.B.B.B.BB.B",
+      "...............",
+      "S.B.S.B.S.B.S.B",
+      "B.B.B.B.B.B.B.B",
+      "SBSBSBSBSBSBSBS"
     ]
   ];
 
@@ -469,7 +643,7 @@
       particles: makeParticles(),
       enemiesLeft: 0, spawnCool: 0, maxOnField: 3,
       toasts: [], levelBanner: 0, levelBannerText: '',
-      freezeTimer: 0, speedBoostTimer: 0
+      freezeTimer: 0, speedBoostTimer: 0, bossActive: false, boss: null
     };
 
     var audio = makeAudio();
@@ -596,6 +770,8 @@
       tank.cool = rate;
       var bcount = tier ? tier.bullets : 1;
       var pierce = tier ? tier.pierce : false;
+      // 穿甲弹道具激活时,玩家子弹临时穿透
+      if (tank.isPlayer && state.player.pierceTimer > 0) pierce = true;
       var col = tank.isPlayer ? COLOR.warn : COLOR.danger;
       var speed = 360;
       for (var i = 0; i < bcount; i++) {
@@ -650,6 +826,24 @@
         state.enemies.length = 0;
         state.shake = 0.8;
         audio.explode();
+      } else if (p.type === 'freeze') {
+        // 停敌:冻结所有敌人 5 秒
+        state.freezeTimer = 5;
+        for (var fi = 0; fi < state.enemies.length; fi++) {
+          state.particles.spawn(state.enemies[fi].x, state.enemies[fi].y, { n: 8, color: COLOR.ice2, life: 0.5 });
+        }
+      } else if (p.type === 'pierce') {
+        // 穿甲弹:玩家临时穿透(持续 8 秒)
+        state.player.pierceTimer = 8;
+      } else if (p.type === 'ironwall') {
+        // 基地铁墙:基地周围的砖墙变钢墙
+        var baseC2 = Math.floor(COLS / 2), baseR2 = ROWS - 1;
+        var walls2 = [[baseR2-1, baseC2], [baseR2, baseC2-1], [baseR2, baseC2+1], [baseR2-1, baseC2-1], [baseR2-1, baseC2+1]];
+        for (var wi = 0; wi < walls2.length; wi++) {
+          var wr = walls2[wi][0], wc = walls2[wi][1];
+          if (state.map[wr] && state.map[wr][wc] === T.BRICK) state.map[wr][wc] = T.STEEL;
+        }
+        toast('基地防御升级为钢铁!', 'ok');
       }
     }
 
@@ -659,19 +853,38 @@
       if (state.enemiesLeft <= 0) return;
       var type;
       var lv = state.level;
-      // 关卡解锁敌人类型
+      // 关卡解锁敌人类型(递进)
       var pool = ['light'];
       if (lv >= 2) pool.push('heavy');
       if (lv >= 3) pool.push('fast');
+      if (lv >= 6) pool.push('armor');
+      if (lv >= 8) pool.push('sniper');
       type = pool[Math.floor(Math.random() * pool.length)];
       var spawnIdx = state.enemiesLeft % 3;
-      // 检查出生点是否被占
       var e = makeEnemy(type, spawnIdx);
       for (var i = 0; i < state.enemies.length; i++) {
         if (Math.abs(e.x - state.enemies[i].x) < CELL && Math.abs(e.y - state.enemies[i].y) < CELL) return;
       }
       state.enemies.push(e);
       state.enemiesLeft--;
+    }
+    // Boss 生成(第 5/10/15/20 关,血量随次数提升)
+    function spawnBoss() {
+      var scale = state.level === 5 ? 1 : (state.level === 10 ? 1.5 : (state.level === 15 ? 2 : 2.6));
+      var hp = Math.round(BOSS.hp * scale);
+      var sx = Math.floor(COLS / 2);
+      state.boss = {
+        type: 'boss', def: BOSS,
+        x: offX + sx * CELL + CELL / 2, y: offY + CELL / 2,
+        dir: 2, cool: 1, hp: hp, maxHp: hp, hurt: 0,
+        moving: true, size: CELL * 1.5, aiTimer: 0, isPlayer: false, spawnProtect: 1.2,
+        isBoss: true, summonTimer: 8, stage: 1
+      };
+      state.enemies.push(state.boss);
+      state.bossActive = true;
+      state.shake = 0.9;
+      toast('⚠ Boss · ' + BOSS.name + ' 出现!', 'warn');
+      audio.explode();
     }
 
     // ---- 敌方 AI ----
@@ -680,14 +893,59 @@
       e.aiTimer -= dt;
       var def = e.def;
       var changed = false;
-      // 追击型:朝玩家方向
+      // AI 差异化
       if (def.ai === 'chase' && state.player) {
+        // 追击型:朝玩家方向
         if (e.aiTimer <= 0) {
           e.aiTimer = rand(0.6, 1.4);
           var dx = state.player.x - e.x, dy = state.player.y - e.y;
           if (Math.abs(dx) > Math.abs(dy)) e.dir = dx > 0 ? 1 : 3;
           else e.dir = dy > 0 ? 2 : 0;
           changed = true;
+        }
+      } else if (def.ai === 'sniper') {
+        // 狙击型:朝玩家方向瞄准(远程精准射击),保持距离少移动
+        if (e.aiTimer <= 0) {
+          e.aiTimer = rand(1.0, 2.0);
+          if (state.player) {
+            var sdx = state.player.x - e.x, sdy = state.player.y - e.y;
+            if (Math.abs(sdx) > Math.abs(sdy)) e.dir = sdx > 0 ? 1 : 3;
+            else e.dir = sdy > 0 ? 2 : 0;
+          }
+          changed = true;
+        }
+      } else if (def.ai === 'charge') {
+        // 冲锋型:直冲底部基地(优先向下)
+        if (e.aiTimer <= 0 || !moveTank(e, e.dir, def.speed, dt)) {
+          e.aiTimer = rand(0.4, 1.0);
+          // 优先向下,其次朝基地方向
+          var cdx = offX + Math.floor(COLS / 2) * CELL - e.x;
+          if (moveTank(e, 2, def.speed, dt)) e.dir = 2;
+          else if (cdx > 0 && moveTank(e, 1, def.speed, dt)) e.dir = 1;
+          else if (cdx < 0 && moveTank(e, 3, def.speed, dt)) e.dir = 3;
+          else e.dir = 2;
+          changed = true;
+        }
+      } else if (e.isBoss) {
+        // Boss:缓慢追击玩家 + 周期召唤小怪 + 多向射击
+        if (e.aiTimer <= 0) {
+          e.aiTimer = rand(0.8, 1.6);
+          if (state.player) {
+            var bdx = state.player.x - e.x, bdy = state.player.y - e.y;
+            if (Math.abs(bdx) > Math.abs(bdy)) e.dir = bdx > 0 ? 1 : 3;
+            else e.dir = bdy > 0 ? 2 : 0;
+          }
+          changed = true;
+        }
+        // 召唤小怪(每 8 秒,2 个普通敌人)
+        e.summonTimer -= dt;
+        if (e.summonTimer <= 0 && state.enemies.length < state.maxOnField + 3) {
+          e.summonTimer = 8;
+          for (var si = 0; si < 2; si++) {
+            var nr = clamp(e.row != null ? e.row : Math.floor((e.y - offY) / CELL) + (si === 0 ? -1 : 1), 1, ROWS - 3);
+            state.enemies.push(makeEnemy('light', si));
+            toast('Boss 召唤了援军!');
+          }
         }
       } else {
         // 巡逻:撞墙或随机变向
@@ -701,11 +959,21 @@
         }
       }
       if (!changed) moveTank(e, e.dir, def.speed, dt);
-      // 射击
+      // 射击(Boss 多向散射)
       e.cool -= dt;
       if (e.cool <= 0) {
-        fire(e, null);
-        e.cool = def.fireRate * rand(0.7, 1.3);
+        if (e.isBoss) {
+          // Boss 同时朝当前方向 + 两侧射击
+          fire(e, null);
+          var oldDir = e.dir;
+          e.dir = (oldDir + 1) % 4; fire(e, null);
+          e.dir = (oldDir + 3) % 4; fire(e, null);
+          e.dir = oldDir;
+          e.cool = def.fireRate * 1.5;
+        } else {
+          fire(e, null);
+          e.cool = def.fireRate * rand(0.7, 1.3);
+        }
       }
     }
 
@@ -717,6 +985,7 @@
       if (p.hurt > 0) p.hurt -= dt;
       if (p.shieldTimer > 0) p.shieldTimer -= dt;
       if (p.spawnProtect > 0) p.spawnProtect -= dt;
+      if (p.pierceTimer > 0) p.pierceTimer -= dt;
       var tier = getTier();
       var speed = tier.speed * (state.speedBoostTimer > 0 ? 1.5 : 1);
       p.moving = false;
@@ -793,13 +1062,30 @@
             var e = state.enemies[j];
             if (e.spawnProtect > 0) continue;
             if (Math.abs(b.x - e.x) < e.size / 2 && Math.abs(b.y - e.y) < e.size / 2) {
-              e.hp--; e.hurt = 0.2;
+              // 装甲坦克正面(朝玩家方向)减伤 50%
+              var dmg = 1;
+              if (e.def.frontArmor) {
+                // 子弹从坦克正面来(即 e.dir 的反方向)→ 减伤
+                var fromFront = (e.dir === 0 && b.vy > 0) || (e.dir === 2 && b.vy < 0) || (e.dir === 1 && b.vx < 0) || (e.dir === 3 && b.vx > 0);
+                if (fromFront) dmg = 0.5;
+              }
+              e.hp -= dmg; e.hurt = 0.2;
               state.particles.spawn(b.x, b.y, { n: 6, color: e.def.color, life: 0.3 });
               if (e.hp <= 0) {
                 state.score += e.def.score; emitScore();
                 state.particles.spawn(e.x, e.y, { n: 22, color: e.def.color, life: 0.7, sizeMin: 2, sizeMax: 6 });
                 state.particles.spawn(e.x, e.y, { n: 10, color: COLOR.warn, life: 0.5, glow: true });
                 maybeDropPowerup(e.x, e.y);
+                if (e.isBoss) {
+                  // Boss 死亡:大爆炸 + 清场
+                  state.bossActive = false; state.boss = null;
+                  state.shake = 1.2;
+                  state.particles.spawn(e.x, e.y, { n: 40, color: COLOR.neon2, life: 1.0, sizeMin: 3, sizeMax: 8 });
+                  toast('击败 Boss!+' + e.def.score, 'ok');
+                  // Boss 死后清空残余敌人
+                  state.enemies.length = 0;
+                  state.enemiesLeft = 0;
+                }
                 state.enemies.splice(j, 1);
                 audio.explode();
               } else { audio.hit(); }
@@ -841,12 +1127,18 @@
       state.player = makePlayer();
       state.enemies = []; state.bullets = []; state.powerups = []; state.effects = [];
       state.particles.clear();
-      state.enemiesLeft = 4 + state.level * 2;
+      state.bossActive = false; state.boss = null;
+      var isBossLevel = (state.level === 5 || state.level === 10 || state.level === 15 || state.level === 20);
+      state.enemiesLeft = isBossLevel ? 6 + state.level : 4 + state.level * 2;
       state.spawnCool = 1.5;
       state.maxOnField = state.diff === 'easy' ? 3 : (state.diff === 'hard' ? 5 : 4);
       state.levelBanner = 1.8;
-      state.levelBannerText = '第 ' + state.level + ' 关 · ' + (state.enemiesLeft) + ' 辆敌坦';
+      state.levelBannerText = '第 ' + state.level + ' 关' + (isBossLevel ? ' · ⚠ Boss 战!' : ' · ' + state.enemiesLeft + ' 辆敌坦');
       emitScore();
+      // Boss 关:延迟生成 Boss(让玩家先就位)
+      if (isBossLevel) {
+        setTimeout(function () { if (state.running && !state.over) spawnBoss(); }, 2500);
+      }
     }
 
     // ============================================================
@@ -911,6 +1203,7 @@
       drawGrassOverlay();   // 草丛在坦克之上
       state.particles.draw(ctx);
       drawHUD();
+      if (state.bossActive && state.boss) drawBossHUD();
       if (state.levelBanner > 0) drawLevelBanner();
       drawToasts();
       ctx.restore();
@@ -1091,6 +1384,27 @@
         ctx.textAlign = 'left'; ctx.fillStyle = COLOR.ok; ctx.font = '12px Rajdhani, sans-serif';
         ctx.fillText('⚡' + Math.ceil(state.speedBoostTimer) + 's', buffX + 60, HUD_TOP / 2);
       }
+      if (state.freezeTimer > 0) {
+        ctx.textAlign = 'left'; ctx.fillStyle = COLOR.ice2; ctx.font = '12px Rajdhani, sans-serif';
+        ctx.fillText('❄' + Math.ceil(state.freezeTimer) + 's', buffX + 120, HUD_TOP / 2);
+      }
+      if (state.player && state.player.pierceTimer > 0) {
+        ctx.textAlign = 'left'; ctx.fillStyle = COLOR.neon2; ctx.font = '12px Rajdhani, sans-serif';
+        ctx.fillText('➤' + Math.ceil(state.player.pierceTimer) + 's', buffX + 180, HUD_TOP / 2);
+      }
+    }
+
+    // Boss 血条(底部居中)
+    function drawBossHUD() {
+      var z = state.boss;
+      var bw = W * 0.5, bx = (W - bw) / 2, by = H - 30;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)'; roundRectPath(ctx, bx - 2, by - 2, bw + 4, 14, 7); ctx.fill();
+      var hr = z.hp / z.maxHp;
+      var grd = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      grd.addColorStop(0, COLOR.danger); grd.addColorStop(1, COLOR.neon2);
+      ctx.fillStyle = grd; roundRectPath(ctx, bx, by, bw * hr, 10, 5); ctx.fill();
+      ctx.font = 'bold 13px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = '#fff'; ctx.fillText('☠ ' + z.def.name, W / 2, by - 4);
     }
 
     function drawLevelBanner() {
