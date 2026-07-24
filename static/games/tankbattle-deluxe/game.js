@@ -707,7 +707,8 @@
       return {
         x: offX + pc * CELL + CELL / 2, y: offY + pr * CELL + CELL / 2,
         dir: 0, cool: 0, hurt: 0, shieldTimer: 0, tierIdx: tier, isPlayer: true,
-        moving: false, size: CELL * 0.86, spawnProtect: 1.5
+        moving: false, size: CELL * 0.86, spawnProtect: 1.5,
+        hp: PLAYER_TIERS[tier].hp, maxHp: PLAYER_TIERS[tier].hp, pierceTimer: 0
       };
     }
     function getTier() { return PLAYER_TIERS[state.player.tierIdx]; }
@@ -807,6 +808,10 @@
       if (p.type === 'star') {
         if (state.player.tierIdx < PLAYER_TIERS.length - 1) {
           state.player.tierIdx++;
+          // 升级同步血量上限并回满
+          var nt = PLAYER_TIERS[state.player.tierIdx];
+          state.player.maxHp = nt.hp;
+          state.player.hp = nt.hp;
           audio.levelup();
           toast('升级到 ' + (state.player.tierIdx + 1) + ' 星!', 'ok');
         } else { state.score += 500; emitScore(); }
@@ -1049,7 +1054,7 @@
             if (pl.shieldTimer > 0) {
               state.particles.spawn(b.x, b.y, { n: 8, color: COLOR.neon, life: 0.3 });
             } else {
-              pl.hp = (pl.hp || getTier().hp) - 1;
+              pl.hp = (pl.hp || 0) - 1;
               pl.hurt = 0.3;
               if (pl.hp <= 0) { playerDie(); }
               else { state.particles.spawn(b.x, b.y, { n: 8, color: COLOR.danger, life: 0.3 }); }
