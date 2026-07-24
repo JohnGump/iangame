@@ -483,13 +483,31 @@
     function loadMap(idx) {
       var tpl = MAP_TEMPLATES[(idx - 1) % MAP_TEMPLATES.length];
       var grid = [];
+      var baseR = ROWS - 1, baseC = Math.floor(COLS / 2);
       for (var r = 0; r < ROWS; r++) {
         grid[r] = [];
         for (var c = 0; c < COLS; c++) {
           var ch = tpl[r][c];
           grid[r][c] = ch === 'B' ? T.BRICK : ch === 'S' ? T.STEEL : ch === 'G' ? T.GRASS :
                        ch === 'W' ? T.WATER : ch === 'X' ? T.BASE : T.EMPTY;
+          if (ch === 'X') { baseR = r; baseC = c; }
         }
+      }
+      // 基地保护壳:给基地上/左/右三面加砖墙(经典老家防御,可被打掉但争取反应时间)
+      function safeSet(r, c, v) {
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS && grid[r][c] !== T.BASE) grid[r][c] = v;
+      }
+      safeSet(baseR - 1, baseC, T.BRICK);      // 正上方
+      safeSet(baseR, baseC - 1, T.BRICK);      // 左侧
+      safeSet(baseR, baseC + 1, T.BRICK);      // 右侧
+      safeSet(baseR - 1, baseC - 1, T.BRICK);  // 左上
+      safeSet(baseR - 1, baseC + 1, T.BRICK);  // 右上
+      // 清空玩家出生位(基地左上一格)及上方撤退通道,避免坦克卡墙里
+      var pCol = baseC - 1, pRow = baseR - 1;
+      var clears = [[0, 0], [-1, 0], [-2, 0]];   // 玩家自身 + 上方两格
+      for (var ci = 0; ci < clears.length; ci++) {
+        var rr = pRow + clears[ci][0], cc = pCol + clears[ci][1];
+        if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && grid[rr][cc] !== T.BASE) grid[rr][cc] = T.EMPTY;
       }
       state.map = grid;
       state.baseAlive = true;
@@ -509,8 +527,11 @@
     // ---- 坦克工厂 ----
     function makePlayer() {
       var tier = 0;   // 初始 1 星
+      var baseC = Math.floor(COLS / 2), baseR = ROWS - 1;
+      // 出生在基地左上(紧邻老家,已由 loadMap 清空该区域)
+      var pc = baseC - 1, pr = baseR - 1;
       return {
-        x: offX + CELL * 2 + CELL / 2, y: offY + (ROWS - 2) * CELL + CELL / 2,
+        x: offX + pc * CELL + CELL / 2, y: offY + pr * CELL + CELL / 2,
         dir: 0, cool: 0, hurt: 0, shieldTimer: 0, tierIdx: tier, isPlayer: true,
         moving: false, size: CELL * 0.86, spawnProtect: 1.5
       };
