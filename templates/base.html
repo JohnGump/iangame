@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="{{ lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#060912">
-  <title>{% block title %}iangame · 即开即玩的小游戏站{% endblock %}</title>
-  <meta name="description" content="{{ all_games|length }} 款霓虹电竞风 HTML5 小游戏,免登录即玩,登录享云端记分与全球排行榜。">
+  <title>{% block title %}{{ t.site_title }}{% endblock %}</title>
+  <meta name="description" content="{{ t.site_desc.format(n=all_games|length) }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
@@ -19,9 +19,9 @@
         <span class="hex">⬡</span><span><b>IAN</b>GAME</span>
       </a>
       <div class="nav-links">
-        <a href="{{ url_for('index') }}">首页</a>
-        <a href="{{ url_for('games_page') }}">游戏大厅</a>
-        {% if current_user %}<a href="{{ url_for('profile') }}">个人中心</a>{% endif %}
+        <a href="{{ url_for('index') }}">{{ t.nav_home }}</a>
+        <a href="{{ url_for('games_page') }}">{{ t.nav_games }}</a>
+        {% if current_user %}<a href="{{ url_for('profile') }}">{{ t.nav_profile }}</a>{% endif %}
       </div>
       <div class="nav-right">
         {% if current_user %}
@@ -29,11 +29,15 @@
             <span class="avatar">{{ current_user.username[0] | upper }}</span>
             <span>{{ current_user.username }}</span>
           </a>
-          <a class="btn btn-ghost btn-sm" href="{{ url_for('logout') }}">退出</a>
+          <a class="btn btn-ghost btn-sm" href="{{ url_for('logout') }}">{{ t.nav_logout }}</a>
         {% else %}
-          <a class="btn btn-ghost btn-sm" href="{{ url_for('login') }}">登录</a>
-          <a class="btn btn-primary btn-sm" href="{{ url_for('register') }}">注册</a>
+          <a class="btn btn-ghost btn-sm" href="{{ url_for('login') }}">{{ t.nav_login }}</a>
+          <a class="btn btn-primary btn-sm" href="{{ url_for('register') }}">{{ t.nav_register }}</a>
         {% endif %}
+        <select class="lang-select" aria-label="Language"
+                onchange="if(this.value) window.location.href='/setlang/'+this.value">
+          {% for l in langs %}<option value="{{ l }}" {% if l == lang %}selected{% endif %}>{{ lang_names[l] }}</option>{% endfor %}
+        </select>
       </div>
     </div>
   </nav>
@@ -44,11 +48,12 @@
 
   <footer class="footer">
     <div class="container">
-      iangame.com · 霓虹电竞小游戏聚合 · Built with Flask &amp; Canvas
+      {{ t.footer }}
     </div>
   </footer>
 
   <div class="toast-host" id="toastHost"></div>
+  <script>window.IAN_T = {{ t|tojson }};</script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>

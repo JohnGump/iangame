@@ -33,7 +33,7 @@
       credentials: 'same-origin',
       body: JSON.stringify(body || {})
     });
-    return r.json().catch(function () { return { ok: false, error: '响应解析失败' }; });
+    return r.json().catch(function () { return { ok: false, error: (window.IAN_T && window.IAN_T.err_parse) || '响应解析失败' }; });
   }
 
   var IanAPI = {
@@ -65,7 +65,7 @@
       var s = document.createElement('script');
       s.src = src; s.async = true;
       s.onload = resolve;
-      s.onerror = function () { reject(new Error('加载失败: ' + src)); };
+      s.onerror = function () { reject(new Error(((window.IAN_T && window.IAN_T.err_load) || '加载失败') + ': ' + src)); };
       document.head.appendChild(s);
     });
   }
@@ -82,7 +82,7 @@
       // 确保玩家拿到最新版游戏脚本(开发迭代时尤其重要)
       await loadScript('/static/games/' + slug + '/game.js?v=' + Date.now());
       if (!window.IanGame || typeof window.IanGame.init !== 'function') {
-        throw new Error('游戏未实现 window.IanGame.init 接口');
+        throw new Error((window.IAN_T && window.IAN_T.err_no_iface) || '游戏未实现 window.IanGame.init 接口');
       }
       var ctrl = window.IanGame.init(canvas, hooks);
       // 用完即删全局,避免下一款游戏残留

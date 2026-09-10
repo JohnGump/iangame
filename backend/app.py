@@ -16,6 +16,8 @@ from sqlalchemy.exc import IntegrityError
 from config import Config
 from extensions import db
 from models import User, Game, Score, Favorite, LoginAttempt, SEED_GAMES, CATEGORY_LABELS
+from i18n import LANGS, LANG_NAMES, STRINGS, detect_lang, tr, COOKIE_NAME as LANG_COOKIE, COOKIE_MAX_AGE as LANG_COOKIE_AGE
+from i18n_games import get_game_meta, CATEGORY_LABELS_I18N
 
 _USERNAME_RE = re.compile(r'^[\w\u4e00-\u9fa5]{2,20}$')
 
@@ -92,7 +94,7 @@ def login_required(f):
     def _w(*a, **kw):
         if 'uid' not in session:
             if request.path.startswith('/api/'):
-                return jsonify(ok=False, error='请先登录'), 401
+                return jsonify(ok=False, error=tr('err_login')), 401
             return redirect(url_for('login'))
         return f(*a, **kw)
     return _w
@@ -103,7 +105,7 @@ def csrf_required(f):
     @wraps(f)
     def _w(*a, **kw):
         if not _csrf_check():
-            return jsonify(ok=False, error='跨站请求被拒绝(CSRF 校验失败)'), 403
+            return jsonify(ok=False, error=tr('err_csrf')), 403
         return f(*a, **kw)
     return _w
 
@@ -125,6 +127,11 @@ def create_app(config_class=Config):
     def _security_headers(resp):
         return resp
 
+    # ---- 每请求检测语言(在加载用户之前)----
+    @app.before_request
+    def _detect_lang():
+        g.lang = detect_lang()
+
     # ---- 每请求加载当前用户 ----
     @app.before_request
     def _load_user():
@@ -133,16 +140,32 @@ def create_app(config_class=Config):
 
     @app.context_processor
     def _ctx():
+        lang = getattr(g, 'lang', 'zh')
         games = Game.query.order_by(Game.sort).all()
         counts = {}
         for gm in games:
             counts[gm.category] = counts.get(gm.category, 0) + 1
+        # 当前语言的全部游戏元数据 {slug: {name, desc, controls}}
+        gmeta = {gm.slug: get_game_meta(gm.slug, lang, gm.name, gm.desc, gm.controls) for gm in games}
         return dict(
             current_user=g.user,
             all_games=games,
             category_counts=counts,
-            category_labels=CATEGORY_LABELS,
+            category_labels=CATEGORY_LABELS_I18N.get(lang) or CATEGORY_LABELS,
+            lang=lang,
+            langs=LANGS,
+            lang_names=LANG_NAMES,
+            t=STRINGS.get(lang) or STRINGS['zh'],
+            games_meta=gmeta,
         )
+
+    # ---- 语言切换:设 cookie 后回跳 ----
+    @app.route('/setlang/<lang>')
+    def set_lang(lang):
+        target = lang if lang in LANGS else 'zh'
+        resp = redirect(request.referrer or url_for('index'))
+        resp.set_cookie(LANG_COOKIE, target, max_age=LANG_COOKIE_AGE, samesite='Lax')
+        return resp
 
     # ================= 页面 =================
     @app.route('/')
@@ -163,7 +186,8 @@ def create_app(config_class=Config):
         game_token = ''
         if g.user:
             game_token = _issue_game_token(app, g.user.id)
-        return render_template('play.html', game=game, game_token=game_token)
+        return render_template('play.html', game=game, game_token=game_token,
+                               game_meta=get_game_meta(slug, g.lang, game.name, game.desc, game.controls))
 
     @app.route('/login')
     def login():
@@ -191,11 +215,11 @@ def create_app(config_class=Config):
         u = (d.get('username') or '').strip()
         p = d.get('password') or ''
         if not _USERNAME_RE.match(u):
-            return jsonify(ok=False, error='用户名需 2-20 位(字母/数字/下划线/中文)'), 400
+            return jsonify(ok=False, error=tr('err_username_fmt')), 400
         if u.lower() in _USERNAME_BLACKLIST:
-            return jsonify(ok=False, error='该用户名为保留名,不可注册'), 400
+            return jsonify(ok=False, error=tr('err_username_reserved')), 400
         if not (4 <= len(p) <= 60):
-            return jsonify(ok=False, error='密码需 4-60 位'), 400
+            return jsonify(ok=False, error=tr('err_password_fmt')), 400
         user = User(username=u, password_hash=generate_password_hash(p))
         db.session.add(user)
         try:
@@ -203,7 +227,7 @@ def create_app(config_class=Config):
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-            return jsonify(ok=False, error='用户名已被占用'), 409
+            return jsonify(ok=False, error=tr('err_username_taken')), 409
         session['uid'] = user.id
         return jsonify(ok=True, user=_pub(user))
 
@@ -212,7 +236,7 @@ def create_app(config_class=Config):
     def api_login():
         ip = request.remote_addr or '0.0.0.0'
         if _login_fail_count(ip) >= LOGIN_MAX_FAIL:
-            return jsonify(ok=False, error='尝试过于频繁,请 1 分钟后再试'), 429
+            return jsonify(ok=False, error=tr('err_too_fast')), 429
         d = request.get_json(silent=True) or {}
         u = (d.get('username') or '').strip()
         p = d.get('password') or ''
@@ -220,7 +244,7 @@ def create_app(config_class=Config):
         # 统一报错 + 失败计数(无论用户名是否存在都计,防止用户名枚举探测)
         if not user or not check_password_hash(user.password_hash, p):
             _login_record_fail(ip)
-            return jsonify(ok=False, error='用户名或密码错误'), 401
+            return jsonify(ok=False, error=tr('err_credentials')), 401
         session['uid'] = user.id
         return jsonify(ok=True, user=_pub(user))
 
@@ -259,25 +283,25 @@ def create_app(config_class=Config):
         token = d.get('token') or ''
         # 令牌校验:必须携带本会话签发的有效令牌,防直接调 API 刷分
         if not _verify_game_token(app, g.user.id, token):
-            return jsonify(ok=False, error='令牌无效或已过期,请刷新页面重试'), 403
+            return jsonify(ok=False, error=tr('err_token')), 403
         try:
             score = int(d.get('score') or 0)
             level = int(d.get('level') or 0)
         except (TypeError, ValueError):
-            return jsonify(ok=False, error='参数错误'), 400
+            return jsonify(ok=False, error=tr('err_param')), 400
         if not Game.query.filter_by(slug=slug).first():
-            return jsonify(ok=False, error='游戏不存在'), 404
+            return jsonify(ok=False, error=tr('err_game_not_found')), 404
         if score < 0 or score > app.config['MAX_SCORE_PER_SUBMIT']:
-            return jsonify(ok=False, error='分数非法'), 400
+            return jsonify(ok=False, error=tr('err_score')), 400
         if level < 0 or level > 9999:
-            return jsonify(ok=False, error='关卡非法'), 400
+            return jsonify(ok=False, error=tr('err_level')), 400
         sc = Score(user_id=g.user.id, game_slug=slug, score=score, level=level)
         db.session.add(sc)
         try:
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-            return jsonify(ok=False, error='提交失败'), 400
+            return jsonify(ok=False, error=tr('err_submit')), 400
         higher = db.session.query(func.count(Score.id)).filter(
             Score.game_slug == slug, Score.score > score).scalar() or 0
         rank = higher + 1
@@ -298,7 +322,7 @@ def create_app(config_class=Config):
         d = request.get_json(silent=True) or {}
         slug = (d.get('slug') or '').strip()
         if not Game.query.filter_by(slug=slug).first():
-            return jsonify(ok=False, error='游戏不存在'), 404
+            return jsonify(ok=False, error=tr('err_game_not_found')), 404
         fav = Favorite.query.filter_by(user_id=g.user.id, game_slug=slug).first()
         if fav:
             db.session.delete(fav)
@@ -340,12 +364,12 @@ def create_app(config_class=Config):
     @app.errorhandler(404)
     def _404(e):
         if request.path.startswith('/api/'):
-            return jsonify(ok=False, error='not found'), 404
+            return jsonify(ok=False, error=tr('err_game_not_found')), 404
         return render_template('404.html'), 404
 
     @app.errorhandler(429)
     def _429(e):
-        return jsonify(ok=False, error='请求过于频繁,请稍后再试'), 429
+        return jsonify(ok=False, error=tr('err_rate')), 429
 
     return app
 
@@ -387,9 +411,11 @@ def _verify_game_token(app, user_id, token):
 
 
 def _game_pub(gm):
+    lang = getattr(g, 'lang', 'zh')
+    m = get_game_meta(gm.slug, lang, gm.name, gm.desc, gm.controls)
     return {
-        'slug': gm.slug, 'name': gm.name, 'category': gm.category,
-        'icon': gm.icon, 'color': gm.color, 'desc': gm.desc, 'controls': gm.controls,
+        'slug': gm.slug, 'name': m['name'], 'category': gm.category,
+        'icon': gm.icon, 'color': gm.color, 'desc': m['desc'], 'controls': m['controls'],
     }
 
 

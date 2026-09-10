@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}个人中心 · iangame{% endblock %}
+{% block title %}{{ t.profile_title }}{% endblock %}
 
 {% block content %}
 <div class="container" style="padding-top:24px">
@@ -7,28 +7,28 @@
     <div class="avatar">{{ current_user.username[0]|upper }}</div>
     <div>
       <h2>{{ current_user.username }}</h2>
-      <div class="muted tiny">注册于 {{ current_user.created_at.strftime('%Y-%m-%d') }}</div>
+      <div class="muted tiny">{{ t.joined_at.format(d=current_user.created_at.strftime('%Y-%m-%d')) }}</div>
     </div>
   </div>
 
   <section class="section" style="padding-top:24px">
     <div class="section-head">
-      <div class="section-title"><span class="dot"></span>我的成绩</div>
-      <a class="section-link" href="{{ url_for('games_page') }}">去玩更多 ›</a>
+      <div class="section-title"><span class="dot"></span>{{ t.my_scores }}</div>
+      <a class="section-link" href="{{ url_for('games_page') }}">{{ t.play_more }}</a>
     </div>
     <div class="panel" style="padding:0;overflow:hidden">
       <table class="profile-table">
-        <thead><tr><th>游戏</th><th>历史最佳</th><th>游玩次数</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="4" class="muted tiny" style="padding:20px">加载中…</td></tr></tbody>
+        <thead><tr><th>{{ t.th_game }}</th><th>{{ t.th_best }}</th><th>{{ t.th_plays }}</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="4" class="muted tiny" style="padding:20px">{{ t.loading }}</td></tr></tbody>
       </table>
     </div>
   </section>
 
   <section class="section" style="padding-top:0">
     <div class="section-head">
-      <div class="section-title"><span class="dot"></span>我的收藏</div>
+      <div class="section-title"><span class="dot"></span>{{ t.my_favs }}</div>
     </div>
-    <div class="game-grid compact" id="favGrid"><div class="muted tiny">加载中…</div></div>
+    <div class="game-grid compact" id="favGrid"><div class="muted tiny">{{ t.loading }}</div></div>
   </section>
 </div>
 {% endblock %}
@@ -36,15 +36,17 @@
 {% block scripts %}
 <script>
 (function () {
+  var T = {{ t|tojson }};
   var games = [
     {% for g in all_games %}
+    {% set gm = games_meta[g.slug] %}
     {
       slug: {{ g.slug|tojson }},
-      name: {{ g.name|tojson }},
+      name: {{ gm.name|tojson }},
       category: {{ g.category|tojson }},
       icon: {{ g.icon|tojson }},
       color: {{ g.color|tojson }},
-      desc: {{ g.desc|tojson }}
+      desc: {{ gm.desc|tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
   ];
@@ -57,24 +59,24 @@
     if (!r || !r.ok) return;
     // 成绩表
     if (!r.games.length) {
-      rows.innerHTML = '<tr><td colspan="4" class="muted tiny" style="padding:20px">还没有成绩,去大厅玩一局吧!</td></tr>';
+      rows.innerHTML = '<tr><td colspan="4" class="muted tiny" style="padding:20px">' + T.no_scores + '</td></tr>';
     } else {
       rows.innerHTML = r.games.filter(function (g) { return g.best > 0 || g.plays > 0; })
         .map(function (g) {
           return '<tr><td>' + gameMap[g.slug].icon + ' ' + esc(g.name) + '</td>' +
                  '<td><span class="v">' + g.best + '</span></td>' +
                  '<td>' + g.plays + '</td>' +
-                 '<td><a class="btn btn-ghost btn-sm" href="/play/' + g.slug + '">▶ 玩</a></td></tr>';
+                 '<td><a class="btn btn-ghost btn-sm" href="/play/' + g.slug + '">' + T.play_btn + '</a></td></tr>';
         }).join('');
     }
     // 收藏
     if (!r.favorites || !r.favorites.length) {
-      favGrid.innerHTML = '<div class="muted tiny">还没有收藏,在游戏页点 ☆ 加入收藏</div>';
+      favGrid.innerHTML = '<div class="muted tiny">' + T.no_favs + '</div>';
     } else {
       favGrid.innerHTML = r.favorites.map(function (slug) {
         var g = gameMap[slug]; if (!g) return '';
         return '<a class="game-card" data-cat="' + g.category + '" href="/play/' + slug + '" style="--cover:' + g.color + '">' +
-               '<div class="game-cover"><span class="tag">收藏</span>' + g.icon + '</div>' +
+               '<div class="game-cover"><span class="tag">' + T.fav_tag + '</span>' + g.icon + '</div>' +
                '<div class="game-body"><h3>' + esc(g.name) + '</h3><div class="desc">' + esc(g.desc) + '</div></div></a>';
       }).join('');
     }

@@ -1,17 +1,17 @@
 {% extends 'base.html' %}
-{% block title %}{{ game.name }} · iangame{% endblock %}
+{% block title %}{{ game_meta.name }} · iangame{% endblock %}
 
 {% block content %}
 <div class="container">
   <div class="section" style="padding:24px 0 8px">
     <div class="between" style="flex-wrap:wrap;gap:12px">
       <div class="flex" style="gap:12px;align-items:center">
-        <a class="btn btn-ghost btn-sm" href="{{ url_for('games_page') }}">← 大厅</a>
-        <h1 class="section-title" style="font-size:24px">{{ game.icon }} {{ game.name }}</h1>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('games_page') }}">{{ t.back_lobby }}</a>
+        <h1 class="section-title" style="font-size:24px">{{ game.icon }} {{ game_meta.name }}</h1>
       </div>
       <div class="play-meta">
-        <div class="stat-pill"><div class="k">最高分</div><div class="v" id="bestScore">0</div></div>
-        <div class="stat-pill"><div class="k">本局</div><div class="v" id="curScore">0</div></div>
+        <div class="stat-pill"><div class="k">{{ t.best_score }}</div><div class="v" id="bestScore">0</div></div>
+        <div class="stat-pill"><div class="k">{{ t.current_score }}</div><div class="v" id="curScore">0</div></div>
       </div>
     </div>
   </div>
@@ -22,44 +22,44 @@
         <canvas id="gameCanvas" width="1100" height="660"></canvas>
         <div class="overlay" id="overlay">
           <div>
-            <div class="ttl">{{ game.icon }} {{ game.name }}</div>
-            <div class="sub">{{ game.desc }}</div>
+            <div class="ttl">{{ game.icon }} {{ game_meta.name }}</div>
+            <div class="sub">{{ game_meta.desc }}</div>
             <div class="flex gap-8" style="justify-content:center;margin-bottom:18px">
-              <button class="btn btn-ghost btn-sm diff-btn" data-diff="easy">😊 简单</button>
-              <button class="btn btn-primary btn-sm diff-btn active" data-diff="normal">⚔️ 普通</button>
-              <button class="btn btn-ghost btn-sm diff-btn" data-diff="hard">🔥 困难</button>
+              <button class="btn btn-ghost btn-sm diff-btn" data-diff="easy">{{ t.diff_easy }}</button>
+              <button class="btn btn-primary btn-sm diff-btn active" data-diff="normal">{{ t.diff_normal }}</button>
+              <button class="btn btn-ghost btn-sm diff-btn" data-diff="hard">{{ t.diff_hard }}</button>
             </div>
-            <button class="btn btn-primary" id="startBtn">▶ 开始游戏</button>
+            <button class="btn btn-primary" id="startBtn">{{ t.start_game }}</button>
           </div>
         </div>
       </div>
       <div class="play-toolbar">
         <div class="flex gap-8">
-          <button class="btn btn-ghost btn-sm" id="restartBtn">🔄 重开</button>
-          <button class="btn btn-ghost btn-sm" id="pauseBtn">⏸ 暂停</button>
-          <button class="btn btn-ghost btn-sm" id="fsBtn">⛶ 全屏</button>
+          <button class="btn btn-ghost btn-sm" id="restartBtn">{{ t.btn_restart }}</button>
+          <button class="btn btn-ghost btn-sm" id="pauseBtn">{{ t.btn_pause }}</button>
+          <button class="btn btn-ghost btn-sm" id="fsBtn">{{ t.btn_fs }}</button>
         </div>
-        <div class="muted tiny">操作:{{ game.controls }}</div>
+        <div class="muted tiny">{{ t.controls_prefix }}{{ game_meta.controls }}</div>
       </div>
     </div>
 
     <aside class="play-side">
       <div class="panel">
-        <h4>📖 玩法</h4>
-        <p class="muted tiny">{{ game.desc }}</p>
-        <p class="muted tiny mt-8">操作:{{ game.controls }}</p>
+        <h4>{{ t.howto }}</h4>
+        <p class="muted tiny">{{ game_meta.desc }}</p>
+        <p class="muted tiny mt-8">{{ t.controls_prefix }}{{ game_meta.controls }}</p>
       </div>
       <div class="panel">
-        <h4>🏆 全球排行榜</h4>
-        <div class="lb" id="leaderboard"><div class="lb-empty">加载中…</div></div>
+        <h4>{{ t.leaderboard }}</h4>
+        <div class="lb" id="leaderboard"><div class="lb-empty">{{ t.loading }}</div></div>
         {% if not current_user %}
-        <p class="muted tiny mt-8">登录后可上榜并保存成绩</p>
+        <p class="muted tiny mt-8">{{ t.login_to_rank }}</p>
         {% endif %}
       </div>
       {% if current_user %}
       <div class="panel">
-        <h4>⭐ 收藏</h4>
-        <button class="btn btn-ghost btn-sm btn-block" id="favBtn">☆ 加入收藏</button>
+        <h4>{{ t.favorites }}</h4>
+        <button class="btn btn-ghost btn-sm btn-block" id="favBtn">{{ t.add_fav }}</button>
       </div>
       {% endif %}
     </aside>
@@ -70,6 +70,7 @@
 {% block scripts %}
 <script>
 (function () {
+  var T = {{ t|tojson }};
   var SLUG = {{ game.slug|tojson }};
   var LOGGED_IN = {% if current_user %}true{% else %}false{% endif %};
   // 服务端签发的短期游戏令牌(登录用户),提交分数时必须回传,防直接调 API 刷分
@@ -105,7 +106,7 @@
   }).then(function (c) { ctrl = c; })
     .catch(function (e) {
       overlay.classList.remove('hidden');
-      overlay.querySelector('.ttl').textContent = '游戏加载失败';
+      overlay.querySelector('.ttl').textContent = T.load_failed;
       overlay.querySelector('.sub').textContent = e.message;
       startBtn.style.display = 'none';
     });
@@ -125,8 +126,8 @@
   pauseBtn.addEventListener('click', function () {
     if (!ctrl || !started) return;
     paused = !paused;
-    if (paused) { ctrl.pause(); pauseBtn.textContent = '▶ 继续'; }
-    else { ctrl.resume(); pauseBtn.textContent = '⏸ 暂停'; }
+    if (paused) { ctrl.pause(); pauseBtn.textContent = T.btn_resume; }
+    else { ctrl.resume(); pauseBtn.textContent = T.btn_pause; }
   });
 
   // ---------- 全屏切换(桌面真全屏 + 移动端伪全屏 fallback + 横屏适配) ----------
@@ -134,8 +135,8 @@
   var fsExitBtn = document.createElement('button');
   fsExitBtn.className = 'fs-exit-btn';
   fsExitBtn.innerHTML = '🗗';
-  fsExitBtn.title = '退出全屏 (ESC)';
-  fsExitBtn.setAttribute('aria-label', '退出全屏');
+  fsExitBtn.title = T.btn_exit_fs;
+  fsExitBtn.setAttribute('aria-label', T.btn_exit_fs);
   canvasBox.appendChild(fsExitBtn);
 
   function tryLockLandscape() {
@@ -183,10 +184,10 @@
   fsBtn.addEventListener('click', function () { isFs() ? exitFs() : enterFs(); });
   fsExitBtn.addEventListener('click', exitFs);
   document.addEventListener('fullscreenchange', function () {
-    fsBtn.textContent = document.fullscreenElement ? '🗗 退出全屏' : '⛶ 全屏';
+    fsBtn.textContent = document.fullscreenElement ? T.btn_exit_fs : T.btn_fs;
   });
   document.addEventListener('webkitfullscreenchange', function () {
-    fsBtn.textContent = document.webkitFullscreenElement ? '🗗 退出全屏' : '⛶ 全屏';
+    fsBtn.textContent = document.webkitFullscreenElement ? T.btn_exit_fs : T.btn_fs;
   });
   // ESC:F11 切换全屏;伪全屏时浏览器不会自动退出,需手动处理
   document.addEventListener('keydown', function (e) {
@@ -196,7 +197,7 @@
 
   function beginGame(diff) {
     overlay.classList.add('hidden');
-    paused = false; pauseBtn.textContent = '⏸ 暂停';
+    paused = false; pauseBtn.textContent = T.btn_pause;
     Promise.resolve(loaded).then(function () {
       if (!ctrl) return;
       ctrl.restart(diff || selectedDiff);
@@ -215,7 +216,7 @@
       p = window.IanAPI.submitScore(SLUG, finalScore, finalLevel, GAME_TOKEN).then(function (r) {
         renderLB();
         if (r && r.ok && r.rank && r.rank <= 20) {
-          window.IanToast('上榜!第 ' + r.rank + ' 名', 'ok');
+          window.IanToast(String(T.on_rank).replace('{n}', r.rank), 'ok');
         }
       });
     }
@@ -226,10 +227,10 @@
     overlay.classList.remove('hidden');
     overlay.innerHTML =
       '<div>' +
-        '<div class="ttl">游戏结束</div>' +
-        '<div class="sub">' + (newBest ? '🎉 刷新本地最高分!' : '再接再厉') + '</div>' +
+        '<div class="ttl">' + T.game_over + '</div>' +
+        '<div class="sub">' + (newBest ? T.new_best : T.keep_trying) + '</div>' +
         '<div class="final-score">' + s + '</div>' +
-        '<button class="btn btn-primary" id="againBtn">🔄 再来一局</button>' +
+        '<button class="btn btn-primary" id="againBtn">' + T.play_again + '</button>' +
       '</div>';
     document.getElementById('againBtn').addEventListener('click', beginGame);
   }
@@ -237,7 +238,7 @@
   function renderLB() {
     window.IanAPI.leaderboard(SLUG).then(function (r) {
       if (!r || !r.ok || !r.board || !r.board.length) {
-        lbEl.innerHTML = '<div class="lb-empty">还没有人上榜,快来抢占第一!</div>';
+        lbEl.innerHTML = '<div class="lb-empty">' + T.lb_empty + '</div>';
         return;
       }
       lbEl.innerHTML = r.board.map(function (b, i) {
@@ -257,14 +258,14 @@
   var favBtn = document.getElementById('favBtn');
   window.IanAPI.favList().then(function (r) {
     if (r && r.ok && r.favorites && r.favorites.indexOf(SLUG) >= 0) {
-      favBtn.textContent = '★ 已收藏'; favBtn.classList.add('btn-primary');
+      favBtn.textContent = T.fav_done; favBtn.classList.add('btn-primary');
     }
   });
   favBtn.addEventListener('click', function () {
     window.IanAPI.toggleFav(SLUG).then(function (r) {
       if (!r || !r.ok) return;
-      if (r.favorite) { favBtn.textContent = '★ 已收藏'; favBtn.classList.add('btn-primary'); window.IanToast('已收藏','ok'); }
-      else { favBtn.textContent = '☆ 加入收藏'; favBtn.classList.remove('btn-primary'); }
+      if (r.favorite) { favBtn.textContent = T.fav_done; favBtn.classList.add('btn-primary'); window.IanToast(T.fav_toast,'ok'); }
+      else { favBtn.textContent = T.add_fav; favBtn.classList.remove('btn-primary'); }
     });
   });
   {% endif %}

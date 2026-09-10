@@ -1,30 +1,31 @@
 {% extends 'base.html' %}
-{% block title %}游戏大厅 · iangame{% endblock %}
+{% block title %}{{ t.games_title }} · iangame{% endblock %}
 
 {% block content %}
 <div class="container">
   <section class="section" style="padding-top:32px">
     <div class="section-head">
-      <div class="section-title"><span class="dot"></span>游戏大厅</div>
-      <span class="muted tiny">共 {{ all_games|length }} 款</span>
+      <div class="section-title"><span class="dot"></span>{{ t.games_title }}</div>
+      <span class="muted tiny">{{ t.total_games.format(n=all_games|length) }}</span>
     </div>
     <div class="filters" id="filters">
-      <button class="chip active" data-cat="all">全部</button>
+      <button class="chip active" data-cat="all">{{ t.filter_all }}</button>
       {% for cat, cnt in category_counts.items() %}
       <button class="chip" data-cat="{{ cat }}">{{ category_labels.get(cat, cat) }} · {{ cnt }}</button>
       {% endfor %}
     </div>
     <div class="game-grid" id="grid">
       {% for g in all_games %}
+      {% set gm = games_meta[g.slug] %}
       <a class="game-card" data-cat="{{ g.category }}" href="{{ url_for('play', slug=g.slug) }}" style="--cover:{{ g.color }}">
         <div class="game-cover">
           <span class="tag">{{ category_labels.get(g.category, g.category) }}</span>
           {{ g.icon }}
         </div>
         <div class="game-body">
-          <h3>{{ g.name }}</h3>
-          <div class="desc">{{ g.desc }}</div>
-          <div class="play"><span class="btn btn-primary btn-sm btn-block">▶ 开始</span></div>
+          <h3>{{ gm.name }}</h3>
+          <div class="desc">{{ gm.desc }}</div>
+          <div class="play"><span class="btn btn-primary btn-sm btn-block">{{ t.start_btn }}</span></div>
         </div>
       </a>
       {% endfor %}
