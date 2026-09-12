@@ -12,7 +12,7 @@
 - 一台干净的 Linux 服务器(Ubuntu 22.04 / Debian 12 推荐),**root 权限**
 - Python 3.10+(实测 3.12.3)
 - 域名 `iangame.com` 已在你的 Cloudflare 账号下
-- GitHub 仓库 `JohnGump/iangame`(代码 + 完整 git 历史已推送)
+- GitHub 仓库 `ianwdevs/iangame`(代码 + 完整 git 历史已推送)
 
 ## 架构一览
 
@@ -38,10 +38,10 @@ systemd unit、nginx 配置、`deploy.sh` 的 `PROJECT_DIR` 全写死了这个�
 
 ```bash
 # 若用 SSH 拉(需在新机生成 SSH key 加到 GitHub deploy keys,见下方说明)
-git clone git@github.com:JohnGump/iangame.git /usr/local/coneworkspace/iangame
+git clone git@github.com:ianwdevs/iangame.git /usr/local/coneworkspace/iangame
 
 # 或用 HTTPS 拉(公开仓库可直接拉,无需 key)
-git clone https://github.com/JohnGump/iangame.git /usr/local/coneworkspace/iangame
+git clone https://github.com/ianwdevs/iangame.git /usr/local/coneworkspace/iangame
 
 cd /usr/local/coneworkspace/iangame
 ```
@@ -53,7 +53,7 @@ ssh-keygen -t ed25519 -C "iangame-<新机名>" -f /root/.ssh/id_ed25519 -N ""
 cat /root/.ssh/id_ed25519.pub
 # 2. 把输出加到 GitHub 仓库 Settings → Deploy keys(勾 Allow write access)
 # 3. 测试
-ssh -T git@github.com   # 应返回 "Hi JohnGump/iangame!"
+ssh -T git@github.com   # 应返回 "Hi ianwdevs/iangame!"
 ```
 
 ---
